@@ -30,6 +30,8 @@ class TraditionalHUD extends CommonHUD
 	var npsString = Paths.getString("nps");
 	var botplayString = Paths.getString("botplayMark");
 
+	var clearFlagColor:FlxColor;
+
 	var songHighscore:Int;
 	var songWifeHighscore:Float;
 
@@ -167,6 +169,8 @@ class TraditionalHUD extends CommonHUD
 	}
 
 	inline function getScoreText(){	
+		refreshFCColour();
+		
 		var text:String = '${isHighscore ? hiscoreString : scoreString}: $shownScore';
 		if (!showJudgeCounter) text += separator + '$cbString: $comboBreaks';
 		text += separator + '$ratingString: ${getGradeText()}';
@@ -185,13 +189,56 @@ class TraditionalHUD extends CommonHUD
 		final comboName = stats.accuracySystem == WIFE3 && ratFC == stats.gfc ? stats.fc : ratFC;
 		final ratPerc = Highscore.floorDecimal(ratingPercent * 100, 2);
 
-		return '$ratPerc%'+separator+'$grade [$comboName]';
+		return '$ratPerc%'+separator+'$grade [<piss>$comboName<piss>]';
 	}
 
+	function refreshFCColour(){
+		clearFlagColor =
+			{
+				var color:FlxColor = 0xFFA3A3A3;
+
+				if (ratingFC == stats.fail)
+				{
+					color = judgeColours.get("miss");
+				}
+				else if (comboBreaks == 0)
+				{
+					if (stats.judgements.get("bad") > 0 || stats.judgements.get("shit") > 0)
+						color = 0xFFFFFFFF;
+					else if (stats.judgements.get("good") > 0)
+					{
+						color = judgeColours.get("good");
+						if (stats.judgements.get("good") == 1)
+							color.saturation *= 0.75;
+					}
+					else if (stats.judgements.get("sick") > 0)
+					{
+						color = judgeColours.get("sick");
+						if (stats.judgements.get("sick") == 1)
+							color.saturation *= 0.75;
+					}
+					else if (stats.judgements.get("epic") > 0)
+					{
+						color = judgeColours.get("epic");
+					}
+				}
+
+				color;
+			};
+	}
+
+	var formatting:FlxTextFormat;
+	var funnyFormat:FlxTextFormatMarkerPair;
 	override function update(elapsed:Float)
 	{
-		if (isUpdating)
+		if (isUpdating) {
+			formatting = new FlxTextFormat(clearFlagColor, false, false, 0xFF000000);
+			funnyFormat = new FlxTextFormatMarkerPair(formatting, "<piss>");
+
 			scoreTxt.text = PlayState.instance.cpuControlled && useSubtleMark ? botplayString : getScoreText();
+
+			scoreTxt.applyMarkup(scoreTxt.text, [funnyFormat]);
+		}
 		
 		if (judgeCounters != null) {
 			for (k => v in judgements)
@@ -224,6 +271,8 @@ class TraditionalHUD extends CommonHUD
 				}
 			});
 		}
+		
+		refreshFCColour();
 	}
 
 	function statChanged(stat:String, val:Dynamic)
