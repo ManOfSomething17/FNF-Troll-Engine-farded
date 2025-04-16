@@ -13,6 +13,10 @@ import flixel.tweens.FlxEase;
 import flixel.tweens.FlxTween;
 import flixel.util.FlxColor;
 import flixel.util.FlxTimer;
+import flixel.text.FlxText;
+import flixel.FlxCamera;
+import flixel.util.FlxStringUtil;
+import funkin.data.Highscore;
 
 class GameOverSubstate extends MusicBeatSubstate
 {
@@ -48,6 +52,12 @@ class GameOverSubstate extends MusicBeatSubstate
 	public var cameraSpeed:Float = 1.0;
 	public var defaultCamZoom:Float = 1.0;
 	public var updateCamera:Bool = false;
+
+	var songText:FlxText;
+	var timeText:FlxText;
+	var scoreText:FlxText;
+
+	var camScore:FlxCamera;
 
 	/** Whether key presses to continue or go to the menus are processed */
 	private var canEnd:Bool = false;
@@ -213,6 +223,45 @@ class GameOverSubstate extends MusicBeatSubstate
 			defaultCamZoom = game.stage.stageData.defaultZoom;
 		else
 			defaultCamZoom = FlxG.camera.zoom;
+
+		//SCORE BS!!
+
+		var prevTime = Conductor.songPosition - ClientPrefs.noteOffset;
+		var ratingPercent = game.totalPlayed == 0 ? 0 : game.stats.ratingPercent;
+		var shownScore:String = ClientPrefs.showWifeScore ? Std.string(Math.floor(game.stats.totalNotesHit * 100)) : Std.string(Math.floor(game.stats.score));
+
+		camScore = new FlxCamera();
+		camScore.bgColor.alpha = 0;
+		FlxG.cameras.add(camScore, false);
+
+		songText = new FlxText(0, 0, 0, '${game.displayedSong} - ${game.displayedDifficulty.toUpperCase()}', 20);
+		if (ClientPrefs.getGameplaySetting('instakill', false) == true) songText.text += ' [SUDDEN DEATH]';
+		songText.setFormat(Paths.font("vcr.ttf"), 20, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		songText.borderSize = 1.5;
+		songText.antialiasing = true;
+		songText.setPosition(FlxG.width - songText.width - 40, FlxG.height * 0.84);
+		songText.alpha = 0;
+		add(songText);
+
+		timeText = new FlxText(0, 0, 0, '${FlxStringUtil.formatTime((Math.max(prevTime, 0) / 1000))} / ${FlxStringUtil.formatTime(PlayState.instance.songLength / 1000)}', 20);
+		timeText.setFormat(Paths.font("vcr.ttf"), 20, (prevTime >= 1) ? FlxColor.WHITE : 0xFF727272, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		timeText.borderSize = 1.5;
+		timeText.antialiasing = true;
+		timeText.setPosition(FlxG.width - timeText.width - 40, FlxG.height * 0.84 + 22);
+		timeText.alpha = 0;
+		add(timeText);
+
+		scoreText = new FlxText(0, 0, 0, 'Score: ${shownScore} / ${Highscore.floorDecimal(ratingPercent * 100, 2)}%', 28);
+		scoreText.setFormat(Paths.font("vcr.ttf"), 28, (game.stats.score >= 1) ? FlxColor.WHITE : 0xFF727272, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		scoreText.borderSize = 1.5;
+		scoreText.antialiasing = true;
+		scoreText.setPosition(FlxG.width - scoreText.width - 40, FlxG.height * 0.84 + (22 * 2));
+		scoreText.alpha = 0;
+		add(scoreText);
+
+		songText.cameras = [camScore];
+		timeText.cameras = [camScore];
+		scoreText.cameras = [camScore];
 	}
 
 	var isFollowingAlready:Bool = false;
@@ -263,19 +312,51 @@ class GameOverSubstate extends MusicBeatSubstate
 				else
 					MusicBeatState.resetState(true);
 			});
-		});	
+		});
+		
+		doTextCancel(2);
 	}
 
 	function onCancel(){
 		isEnding = true;
 
-		if (FlxG.sound.music != null) 
-			FlxG.sound.music.stop();
+		/*if (FlxG.sound.music != null) 
+			FlxG.sound.music.stop();*/
 
 		if (genericBitch != null)
 			FlxTween.cancelTweensOf(genericBitch);
-		
-		PlayState.gotoMenus();
+
+		FlxG.sound.play(Paths.sound('cancelMenu'), 0.8);
+
+		if (FlxG.sound.music != null) 
+			FlxTween.tween(FlxG.sound.music, {pitch: 0, volume: 0}, 1.5, {
+				onComplete: function(_){FlxG.sound.music.stop();}
+			});
+
+		doTextCancel(2);
+		FlxG.camera.fade(FlxColor.BLACK, 2, false, function onFadeComplete(){
+			PlayState.gotoMenus();
+		});
+	}
+
+	function doTextStuff()
+	{
+		songText.y -= 20;
+		timeText.y -= 20;
+		scoreText.y -= 20;
+		FlxTween.tween(songText, {alpha: 1, y: songText.y + 20}, 0.4, {ease: FlxEase.quadOut});
+		FlxTween.tween(timeText, {alpha: 1, y: timeText.y + 20}, 0.4, {ease: FlxEase.quadOut, startDelay: 0.3});
+		FlxTween.tween(scoreText, {alpha: 1, y: scoreText.y + 20}, 0.4, {ease: FlxEase.quadOut, startDelay: 0.6});
+	}
+
+	function doTextCancel(length:Float = 2)
+	{
+		FlxTween.cancelTweensOf(songText);
+		FlxTween.cancelTweensOf(timeText);
+		FlxTween.cancelTweensOf(scoreText);
+		FlxTween.tween(songText, {alpha: 0}, length, {ease: FlxEase.linear});
+		FlxTween.tween(timeText, {alpha: 0}, length, {ease: FlxEase.linear});
+		FlxTween.tween(scoreText, {alpha: 0}, length, {ease: FlxEase.linear});
 	}
 	
 	override function update(elapsed:Float)
@@ -294,6 +375,7 @@ class GameOverSubstate extends MusicBeatSubstate
 			{
 				boyfriend.playAnim('deathLoop');
 				FlxG.sound.playMusic(_musicAsset, 1);
+				doTextStuff();
 			}
 		}
 
