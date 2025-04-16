@@ -70,6 +70,15 @@ enum abstract CharacterType(Int) from Int to Int {
 	var BF = 0;
 	var DAD = 1;
 	var GF = 2;
+
+	public static function fromString(str:String):CharacterType {
+		return switch (str.toLowerCase().trim()) {
+			case 'bf'	| 'boyfriend'	| '0': BF;
+			case 'dad'	| 'opponent'	| '1': DAD;	
+			case 'gf'	| 'girlfriend'	| '2': GF;
+			default: -1;
+		}
+	}
 }
 
 /*
@@ -157,7 +166,7 @@ class PlayState extends MusicBeatState
 	public var songSpeed(default, set):Float = 1.0;
 	public var songSpeedType:String = "multiplicative";
 	public var noteKillOffset:Float = 350;
-	public var playbackRate:Float = 1.0;
+	public var playbackRate(default, set):Float = 1.0;
 
 	public var disableModcharts:Bool = false;
 	public var practiceMode:Bool = false;
@@ -513,6 +522,9 @@ class PlayState extends MusicBeatState
 		print('\nCreating PlayState\n');
 		Highscore.loadData();
 		
+		this.songSyncMode = SongSyncMode.fromString(ClientPrefs.songSyncMode);
+
+		Conductor.cleanup();
 		Conductor.safeZoneOffset = ClientPrefs.hitWindow;
 		Wife3.timeScale = Wife3.judgeScales.get(ClientPrefs.judgeDiff);
 		PBot.missThreshold = Math.max(160, ClientPrefs.hitWindow);
@@ -830,72 +842,7 @@ class PlayState extends MusicBeatState
 		grpNoteSplashes.cameras = [camHUD];
 		grpNoteSplashes.add(splash);
 
-		//// Characters
-
-		if (SONG.player2 != null) {
-			dad = new Character(0, 0, SONG.player2);
-			dadMap.set(dad.characterId, dad);
-			dadGroup.add(dad);
-	
-			dad.setDefaultVar("used", true);
-			startCharacter(dad, true);
-	
-			if (stageData.camera_opponent != null) {
-				dad.cameraPosition[0] += stageData.camera_opponent[0];
-				dad.cameraPosition[1] += stageData.camera_opponent[1];
-			}		
-		}
-
 		////
-		if (SONG.player1 != null) {
-			boyfriend = new Character(0, 0, SONG.player1, true);
-			boyfriendMap.set(boyfriend.characterId, boyfriend);
-			boyfriendGroup.add(boyfriend);
-	
-			boyfriend.setDefaultVar("used", true);
-			startCharacter(boyfriend);
-	
-			if (stageData.camera_boyfriend != null) {
-				boyfriend.cameraPosition[0] += stageData.camera_boyfriend[0];
-				boyfriend.cameraPosition[1] += stageData.camera_boyfriend[1];
-			}
-		}
-
-		////
-		if (SONG.gfVersion != null && stageData.hide_girlfriend != true) {
-			gf = new Character(0, 0, SONG.gfVersion);
-			gfMap.set(gf.characterId, gf);
-			gfGroup.add(gf);
-
-			gf.setDefaultVar("used", true);
-			startCharacter(gf);
-
-			gf.scrollFactor.set(0.95, 0.95);
-	
-			if (stageData.camera_girlfriend != null) {
-				gf.cameraPosition[0] += stageData.camera_girlfriend[0];
-				gf.cameraPosition[1] += stageData.camera_girlfriend[1];
-			}
-		}
-
-		////
-		stage.buildStage();
-
-		// in case you want to layer characters or objects in a specific way (like in infimario for example)
-		// RICO CAN WE STOP USING SLURS IN THE CODE
-		// we???
-		// fine, can YOU stop using slurs in the code >:(
-		if (Globals.Function_Stop != callOnHScripts("onAddSpriteGroups"))
-		{
-			add(stage);
-
-			add(gfGroup);
-			add(dadGroup);
-			add(boyfriendGroup);
-
-			add(stage.foreground);
-		}
-
 		var stringId:String = 'difficultyName_$difficultyName';
 		displayedDifficulty = Paths.getString(stringId, difficultyName.replace("-"," ").capitalize());
 		
@@ -944,8 +891,39 @@ class PlayState extends MusicBeatState
 		if(hud is TraditionalHUD || hud is KadeHUD || hud is ClassicHUD)
 			@:privateAccess
 			scoreTxt = (cast hud).scoreTxt;
-		
 		#end
+
+		//// Characters
+
+		if (SONG.player1 != null) {
+			changeCharacter(SONG.player1, BF);
+		}
+
+		if (SONG.player2 != null) {
+			changeCharacter(SONG.player2, DAD);
+		}
+
+		if (SONG.gfVersion != null && stageData.hide_girlfriend != true) {
+			changeCharacter(SONG.gfVersion, GF);
+		}
+
+		////
+		stage.buildStage();
+
+		// in case you want to layer characters or objects in a specific way (like in infimario for example)
+		// RICO CAN WE STOP USING SLURS IN THE CODE
+		// we???
+		// fine, can YOU stop using slurs in the code >:(
+		if (Globals.Function_Stop != callOnHScripts("onAddSpriteGroups"))
+		{
+			add(stage);
+
+			add(gfGroup);
+			add(dadGroup);
+			add(boyfriendGroup);
+
+			add(stage.foreground);
+		}
 		
 		//// Generate playfields so you can actually, well, play the game
 		#if ALLOW_DEPRECATION
@@ -1136,11 +1114,6 @@ class PlayState extends MusicBeatState
 
 		Cache.loadWithList(shitToLoad);
 		shitToLoad = [];
-
-		if(gf!=null) gf.callOnScripts("onAdded", [gf, null]); // if you can come up w/ a better name for this callback then change it lol
-		// (this also gets called for the characters changed in changeCharacter)
-		if(boyfriend!=null) boyfriend.callOnScripts("onAdded", [boyfriend, null]);
-		if(dad!=null) dad.callOnScripts("onAdded", [dad, null]); 
 
 		super.create();
 
@@ -1348,11 +1321,6 @@ class PlayState extends MusicBeatState
 	}
 
 	function startCharacterPos(char:Character, ?gfCheck:Bool = false, ?startBopBeat:Float=-5) {
-		if (gfCheck && char.characterId.startsWith('gf')) { //IF DAD IS GIRLFRIEND, HE GOES TO HER POSITION
-			char.setPosition(GF_X, GF_Y);
-			char.scrollFactor.set(0.95, 0.95);
-			char.danceEveryNumBeats = 2;
-		}
 		char.nextDanceBeat = startBopBeat;
 		char.x += char.positionArray[0];
 		char.y += char.positionArray[1];
@@ -1684,12 +1652,18 @@ class PlayState extends MusicBeatState
 		return null;
 	}
 
+	@:noCompletion
+	private function set_playbackRate(pitch:Float):Float {		
+		FlxG.timeScale = pitch;
+		Conductor.changePitch(pitch);
+		return playbackRate = pitch;
+	}
+
 	private function generateSong(dataPath:String):Void
 	{
 		Conductor.changeBPM(PlayState.SONG.bpm);
 		Conductor.tracks = this.tracks;
 		Conductor.pitch = this.playbackRate;
-		Conductor.useAccPosition = ClientPrefs.songSyncMode=="System Time";
 
 		////
 		songSpeedType = ClientPrefs.getGameplaySetting('scrolltype', songSpeedType);
@@ -2165,7 +2139,7 @@ class PlayState extends MusicBeatState
 		if (options.length < 1)
 			return;
 
-		Conductor.useAccPosition = (ClientPrefs.songSyncMode == "System Time");
+		this.songSyncMode = SongSyncMode.fromString(ClientPrefs.songSyncMode);
 		
 		trace("changed " + options);
 				
@@ -2416,7 +2390,12 @@ class PlayState extends MusicBeatState
 
 	}
 
+	@:noCompletion
+	@:deprecated('resyncVocals is deprecated, use resyncTracks instead')
 	function resyncVocals():Void
+		return resyncTracks();
+
+	override function resyncTracks():Void
 	{
 		if (finishTimer != null || transitioning || isDead)
 			return;
@@ -2424,8 +2403,7 @@ class PlayState extends MusicBeatState
 		if (showDebugTraces)
 			trace("resync vocals!!");
 
-		Conductor.resyncTracks();
-		Conductor.lastSongPos = Conductor.songPosition;
+		super.resyncTracks();
 		
 		updateSongDiscordPresence();
 	}
@@ -2434,7 +2412,6 @@ class PlayState extends MusicBeatState
 	public var canReset:Bool = true;
 	var startedCountdown:Bool = false;
 	var canPause:Bool = true;
-	var lastMixTimer:Float = 0;
 	var prevNoteCount:Int = 0;
 
 	private var svIndex:Int =0;
@@ -2605,40 +2582,7 @@ class PlayState extends MusicBeatState
 			}
 			else if (Conductor.songPosition >= 0) 
 			{
-				switch(ClientPrefs.songSyncMode ){
-					case "Direct":
-						// Ludem Dare sync
-						// Jittery and retarded, but works maybe
-						Conductor.songPosition = inst.time;
-					case "Legacy":
-						// Resync Vocals
-						// FUCKING SUCKS DONT USE LMFAO! It's here just incase though
-						Conductor.songPosition += elapsed * 1000;
-						
-					case "Psych 1.0":
-						// Psych 1.0 method
-						// Since this works better for Rico so might work better for some other machines too
-						Conductor.songPosition += elapsed * 1000;
-						Conductor.songPosition = FlxMath.lerp(inst.time, Conductor.songPosition, Math.exp(-elapsed * 5));
-						var timeDiff:Float = Math.abs(inst.time - Conductor.songPosition);
-						if (timeDiff > 1000)
-							Conductor.songPosition = Conductor.songPosition + 1000 * FlxMath.signOf(timeDiff);
-
-					case "System Time":
-						Conductor.songPosition = Conductor.getAccPosition();
-					
-					default: //case "Last Mix":
-						// Stepmania method
-						// Works for most people it seems??
-						if (Conductor.lastSongPos != inst.time) {
-							Conductor.lastSongPos = inst.time;
-							lastMixTimer = 0;
-						}else
-							lastMixTimer += elapsed * 1000;
-						
-						Conductor.songPosition = inst.time + lastMixTimer;
-
-				}
+				updateSongPosition(elapsed);
 			}
 		}
 
@@ -2751,56 +2695,44 @@ class PlayState extends MusicBeatState
 	public function changeCharacter(name:String, charType:CharacterType)
 	{
 		var oldChar:Character;
-		var newChar:Character;
+		var charMap:Map<String, Character>;
 		var varName:String;
 
 		switch(charType) {
-			default: return;
-			
 			case BF:
-				if (boyfriend != null && boyfriend.characterId == name)
-					return;
-				
-				if (!boyfriendMap.exists(name)) 
-					addCharacterToList(name, charType);
-				
 				oldChar = boyfriend;
-				newChar = boyfriend = boyfriendMap.get(name);
+				charMap = boyfriendMap;
 				varName = 'boyfriendName';
 
 			case DAD:
-				if (dad != null && dad.characterId == name)
-					return;
-
-				if (!dadMap.exists(name)) 
-					addCharacterToList(name, charType);
-				
 				oldChar = dad;
-				newChar = dad = dadMap.get(name);
+				charMap = dadMap;
 				varName = 'dadName';
 
-				if (gf != null) {
-					if (oldChar != null && oldChar.characterId.startsWith('gf')) // if the old character was hiding gf, make her visible again.
-						gf.visible = true;
-
-					if (newChar != null && newChar.characterId.startsWith('gf')) // if the new character is a gf character, hide the actual gf as this will take it's position 
-						gf.visible = false; 
-				}
-
 			case GF:
-				if (gf != null && gf.characterId == name) 
-					return;
-
-				if (!gfMap.exists(name))
-					addCharacterToList(name, charType);
-		
 				oldChar = gf;
-				newChar = gf = gfMap.get(name);
+				charMap = gfMap;
 				varName = "gfName";
+
+			default: return;
 		}
+
+		if (oldChar != null && oldChar.characterId == name)
+			return;
 
 		if (showDebugTraces)
 			trace('turning $charType into ' + name);
+		
+		if (!charMap.exists(name))
+			addCharacterToList(name, charType);
+		
+		var newChar:Character = charMap.get(name);
+		
+		switch(charType) {
+			case BF: boyfriend = newChar;
+			case DAD: dad = newChar;
+			case GF: gf = newChar;
+		}
 
 		setOnScripts(varName, name);
 
@@ -2843,14 +2775,8 @@ class PlayState extends MusicBeatState
 		}
 	}
 
-	public static function getCharacterTypeFromString(str:String):CharacterType {
-		return switch (str.toLowerCase().trim()) {
-			case 'bf'	| 'boyfriend'	| '0': BF;
-			case 'dad'	| 'opponent'	| '1': DAD;	
-			case 'gf'	| 'girlfriend'	| '2': GF;
-			default: -1;
-		}
-	}
+	public static function getCharacterTypeFromString(str:String):CharacterType
+		return CharacterType.fromString(str);
 
 	public function triggerEventNote(eventName:String = "", value1:String = "", value2:String = "", ?time:Float) {
 		if (time==null)
@@ -2904,16 +2830,10 @@ class PlayState extends MusicBeatState
 				var time:Float = Std.parseFloat(value2);
 				if(Math.isNaN(time) || time <= 0) time = 0.6;
 
-				if (value != 0) {
-					if (dad != null && dad.characterId.startsWith('gf')) { //Tutorial GF is actually Dad! The GF is an imposter!! ding ding ding ding ding ding ding, dindinding, end my suffering
-						dad.playAnim('cheer', true);
-						dad.specialAnim = true;
-						dad.heyTimer = time;
-					} else if (gf != null) {
-						gf.playAnim('cheer', true);
-						gf.specialAnim = true;
-						gf.heyTimer = time;
-					}
+				if (value != 0 && gf != null) {
+					gf.playAnim('cheer', true);
+					gf.specialAnim = true;
+					gf.heyTimer = time;
 				}
 				if (value != 1 && boyfriend != null) {
 					boyfriend.playAnim('hey', true);
@@ -2922,8 +2842,8 @@ class PlayState extends MusicBeatState
 				}
 
 			case 'Set GF Speed':
-				var value:Int = Std.parseInt(value1);
-				if(Math.isNaN(value) || value < 1) value = 1;
+				var value:Null<Int> = Std.parseInt(value1);
+				if (value == null || value < 1) value = 1;
 				gfSpeed = value;
 
 			case 'Add Camera Zoom':
@@ -4097,18 +4017,6 @@ class PlayState extends MusicBeatState
 	override function stepHit()
 	{
 		super.stepHit();
-
-		if (ClientPrefs.songSyncMode == 'Legacy') {
-			var needsResync:Bool = false;
-			for (track in tracks) {
-				if (Math.abs(track.time - Conductor.songPosition) > 30){
-					needsResync = true;
-					break;
-				}
-			}
-			if(needsResync)
-				resyncVocals();
-		}
 		
 		hud.stepHit(curStep);
 		setOnScripts('curStep', curStep);
