@@ -3,6 +3,7 @@ package funkin.objects;
 import funkin.states.PlayState;
 import funkin.scripts.FunkinScript.ScriptType;
 import funkin.objects.playfields.PlayField;
+import funkin.objects.notes.Note;
 import funkin.data.CharacterData;
 import funkin.data.CharacterData.*;
 import funkin.scripts.*;
@@ -86,7 +87,10 @@ class Character extends FlxSprite
 
 	////
 
-	/**The next beat the character will dance on. Set by PlayState**/
+	/**Whether this character is currently in use, Used by PlayState Character Change Events**/
+	public var used:Bool = false;
+
+	/**The next beat the character will dance on. Used by PlayState**/
 	public var nextDanceBeat:Float = -5;
 
 	/**Index of the next animation to play on the dance sequence**/
@@ -302,8 +306,8 @@ class Character extends FlxSprite
 
 	public function createPlaceholderAnims() {
 		for (animName in ["singLEFT", "singDOWN", "singUP", "singRIGHT"]) {
-			cloneAnimation(animName,		animName+'miss');
-			cloneAnimation(animName,		animName+'-alt');
+			cloneAnimation(animName, 		animName+'miss');
+			cloneAnimation(animName, 		animName+'-alt');
 			cloneAnimation(animName+'-alt',	animName+'-altmiss');
 		}
 	}
@@ -558,6 +562,31 @@ class Character extends FlxSprite
 			var calc:Float = danceEveryNumBeats * (danceIdle ? 0.5 : 2.0);
 			danceEveryNumBeats = Math.round(Math.max(calc, 1));
 		}
+	}
+
+	/** To be called when this character is used, Used by PlayState Character Change Events **/
+	public function changedIn(prevCharacter:Null<Character>) {
+		inline function canResumeAnim(c:Character):Bool {
+			return c != null && animation.exists(c.animation.name) && (characterId.startsWith(c.characterId) || c.characterId.startsWith(characterId));
+		}
+		if (canResumeAnim(prevCharacter)) {
+			var anim = prevCharacter.animation.curAnim;
+			playAnim(anim.name, true, anim.reversed, anim.curFrame);
+		}else {
+			dance();
+		}
+		
+		used = true;
+		setOnScripts("used", true);
+		callOnScripts("changedIn", [prevCharacter]); // if you can come up w/ a better name for this callback then change it lol
+		// (this also gets called for the characters set by the chart's player1/player2)
+	}
+
+	/** To be called when this character is changed out for another, Used by PlayState Character Change Events **/
+	public function changedOut(newCharacter:Null<Character>) {
+		used = false;
+		setOnScripts("used", false);
+		callOnScripts("changedOut", [newCharacter]);
 	}
 
 	public function addOffset(name:String, x:Float = 0, y:Float = 0)

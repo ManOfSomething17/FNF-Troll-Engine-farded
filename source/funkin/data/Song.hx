@@ -19,21 +19,27 @@ using funkin.CoolerStringTools;
 using StringTools;
 
 typedef SwagSong = {
-	//// internal
-	@:optional var path:String;
-	var validScore:Bool;
+	////
+	var notes:Array<SwagSection>;
+	
+	var keyCount:Int;
+
+	/** Offsets the chart notes **/
+	var offset:Float;
+	
+	/** How spread apart the notes should be **/
+	var speed:Float;
 
 	////
 	var song:String;
-	var bpm:Float;
-	var tracks:SongTracks; // currently used
-	
-	var speed:Float;
-	var keyCount:Int;
-	var notes:Array<SwagSection>;
-	var events:Array<Array<Dynamic>>;
-	var offset:Float; // Offsets the chart
 
+	/** Starting BPM of the song **/
+	var bpm:Float;
+	
+	/** Song track data containing the file names of the song's tracks **/
+	var tracks:SongTracks;
+
+	////
 	var player1:Null<String>;
 	var player2:Null<String>;
 	var gfVersion:Null<String>;
@@ -42,12 +48,17 @@ typedef SwagSong = {
 
 	var arrowSkin:String;
 	var splashSkin:String;
-	
-	//// Used for song info showed on the pause menu
+
+	////
+	@:optional var events:Array<Array<Dynamic>>;
 	@:optional var metadata:SongMetadata;
+
+	//// internal
+	@:optional var path:String;
+	var validScore:Bool;
 }
 
-typedef EventNote = {
+typedef PsychEvent = {
 	strumTime:Float,
 	event:String,
 	value1:String,
@@ -63,8 +74,6 @@ typedef JsonSong = {
 	@:optional var mania:Int; // vs shaggy
 	@:optional var keyCount:Int;
 	@:optional var offset:Float;
-
-	// @:optional var info:Array<String>; // old te
 }
 
 typedef SongTracks = {
@@ -75,19 +84,55 @@ typedef SongTracks = {
 
 typedef SongMetadata =
 {
-	?songName:String,
-	?artist:String,
-	?charter:String,
-	?modcharter:String,
-	?extraInfo:Array<String>,
+	/** The display name of this song **/
+	var ?songName:String;
+	
+	@:optional var artist:String;
+	@:optional var charter:String;
+	@:optional var modcharter:String;
+	@:optional var extraInfo:Array<String>;
 }
 
 inline final DEFAULT_CHART_ID = "normal";
-class Song
+
+abstract class BaseSong
 {
 	public final songId:String;
 	public final folder:String = '';
 
+	public function new(songId:String, folder:String = '')
+	{
+		this.songId = songId;
+		this.folder = folder;
+	}
+
+	public function toString()
+		return '$folder:$songId';
+
+	/**
+	 * Returns metadata for the requested chartId. 
+	 * If it doesn't exist, metadata for the default chart is returned instead
+	 * 
+	 * @param chartId The song chart for which you want to request metadata
+	**/
+	abstract public function getMetadata(chartId:String = DEFAULT_CHART_ID):SongMetadata;
+
+	/**
+	 * Returns chart data for the requested chartId. 
+	 * If it doesn't exist, null is returned instead
+	 * 
+	 * @param chartId The song chart for which you want to request chart data
+	**/
+	abstract public function getSwagSong(chartId:String = DEFAULT_CHART_ID):Null<SwagSong>;
+
+	/**
+	 * Returns a path to a file of name fileName that belongs to this song
+	**/
+	abstract public function getSongFile(fileName:String):String;
+}
+
+class Song extends BaseSong
+{
 	public var songPath(get, default):String;
 	public var charts(get, null):Array<String>;
 	private var metadataCache = new Map<String, SongMetadata>();
@@ -104,8 +149,7 @@ class Song
 
 	public function new(songId:String, ?folder:String)
 	{
-		this.songId = songId;
-		this.folder = folder ?? '';
+		super(songId, folder);
 		#if !PE_MOD_COMPATIBILITY
 		this.songPath = Paths.getFolderPath(this.folder) + '/songs/$songId';
 		#else
@@ -115,6 +159,9 @@ class Song
 		#end
 	}
 
+	/**
+	 * Returns a path to a file of name fileName that belongs to this song
+	**/
 	public function getSongFile(fileName:String) {
 		var path = '$songPath/$fileName';
 
@@ -128,12 +175,10 @@ class Song
 		return path;
 	}
 
+	// idk perhaps moving ts to playstate would be more appropiate
 	public function play(?chartName:String = ''){
 		Song.playSong(this, chartName);
 	}
-
-	public function toString()
-		return '$folder:$songId';
 
 	/** get uncached metadata **/
 	private function _getMetadata(chart:String):Null<SongMetadata> {
@@ -268,6 +313,7 @@ class Song
 
 	////
 
+	/** Return an array of strings related to the song's credits **/
 	public static function getMetadataInfo(metadata:SongMetadata):Array<String> {
 		var info:Array<String> = [];
 		
@@ -714,7 +760,7 @@ class Song
 		return swagJson;
 	}
 
-	public static function getEventNotes(rawEventsData:Array<Array<Dynamic>>, ?resultArray:Array<EventNote>):Array<EventNote>
+	public static function getEventNotes(rawEventsData:Array<Array<Dynamic>>, ?resultArray:Array<PsychEvent>):Array<PsychEvent>
 	{
 		if (resultArray==null) resultArray = [];
 		
@@ -739,7 +785,7 @@ class Song
 			var subEvents:Array<Array<Dynamic>> = event[1];
 
 			for (eventData in subEvents) {
-				var eventNote:EventNote = {
+				var eventNote:PsychEvent = {
 					strumTime: eventTime,
 					event: eventData[0],
 					value1: eventData[1],
