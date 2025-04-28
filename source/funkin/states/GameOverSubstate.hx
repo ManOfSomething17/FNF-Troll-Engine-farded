@@ -17,6 +17,7 @@ import flixel.text.FlxText;
 import flixel.FlxCamera;
 import flixel.util.FlxStringUtil;
 import funkin.data.Highscore;
+import math.CoolMath;
 
 class GameOverSubstate extends MusicBeatSubstate
 {
@@ -251,7 +252,7 @@ class GameOverSubstate extends MusicBeatSubstate
 		timeText.alpha = 0;
 		add(timeText);
 
-		scoreText = new FlxText(0, 0, 0, 'Score: ${shownScore} / ${Highscore.floorDecimal(ratingPercent * 100, 2)}%', 28);
+		scoreText = new FlxText(0, 0, 0, 'Score: ${shownScore} / ${CoolMath.floorDecimal(ratingPercent * 100, 2)}%', 28);
 		scoreText.setFormat(Paths.font("vcr.ttf"), 28, (game.stats.score >= 1) ? FlxColor.WHITE : 0xFF727272, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		scoreText.borderSize = 1.5;
 		scoreText.antialiasing = true;
