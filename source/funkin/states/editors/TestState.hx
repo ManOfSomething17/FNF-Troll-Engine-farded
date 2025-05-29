@@ -134,11 +134,11 @@ class TestState extends MusicBeatState{
 		
 		////
 		inputText.focusGained = function(){
-			StartupState.specialKeysEnabled = false;
+			FNFGame.specialKeysEnabled = false;
 			updateFunction = function(){ if (FlxG.keys.justPressed.ENTER) inputText.focusLost();}
 		};
 		inputText.focusLost = function(){
-			StartupState.specialKeysEnabled = true;
+			FNFGame.specialKeysEnabled = true;
 
 			inputText.hasFocus = false;
 			updateFunction = null;
@@ -211,7 +211,7 @@ class TestState extends MusicBeatState{
 			// Stage Update 
 			var newStageName = stageNames[Std.int(bgStepper.value)];
 
-			if (bg != null && bg.curStage != newStageName){
+			if (bg != null && bg.stageId != newStageName){
 				bgGroup.remove(bg).destroy();
 				bg = null;
 			}else if (bg != null)

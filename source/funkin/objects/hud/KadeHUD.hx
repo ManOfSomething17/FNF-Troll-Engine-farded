@@ -51,16 +51,16 @@ class KadeHUD extends BaseHUD
 	override function getHealthbar():FNFHealthBar 
 		return healthBar;
 
-	public function new(iP1:String, iP2:String, songName:String, stats:Stats)
+	public function new(songName:String, stats:Stats)
 	{
-		super(iP1, iP2, songName, stats);
+		super(songName, stats);
 
 		var songRecord = Highscore.getRecord(this.songName, PlayState.difficultyName);
 		songHighscore = songRecord.score;
 		songWifeHighscore = songRecord.accuracyScore;
 	
 		//// Health bar
-		healthBar = new ShittyBar(iP1, iP2);
+		healthBar = new ShittyBar('bf', 'dad');
 		healthBarBG = healthBar.healthBarBG;
 		iconP1 = healthBar.iconP1;
 		iconP2 = healthBar.iconP2;
@@ -111,11 +111,14 @@ class KadeHUD extends BaseHUD
 		add(iconP1);
 		add(iconP2);
 
+		this.displayedJudges.remove("cb");
+
 		for(counterIdx => judge in displayedJudges){
 			var offset = -40+(counterIdx*20);
 
 			var txt = new FlxText(4, (FlxG.height/2)+offset, FlxG.width - 8, "", 20);
-			txt.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE,FlxColor.BLACK);
+			txt.setFormat(Paths.font("vcr.ttf"), 20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE,FlxColor.BLACK);
+			txt.borderSize = 2;
 			txt.scrollFactor.set();
 			add(txt);
 			counters.set(judge,txt);
@@ -129,6 +132,22 @@ class KadeHUD extends BaseHUD
 	private function updateJudgeCounter(id:String) {
 		if (counters.exists(id))
 			counters.get(id).text = '${displayNames[id]}: ${judgements[id]}';
+	}
+
+	override function changedCharacter(id:Int, char:Character){
+
+		switch(id){
+			case 0:
+				iconP1.changeIcon(char.healthIcon);
+			case 1:
+				iconP2.changeIcon(char.healthIcon);
+			case 2:
+				// gf icon
+			default:
+				// idk
+		}
+		
+		super.changedCharacter(id, char);
 	}
 
 	override function changedOptions(changed){
@@ -165,16 +184,16 @@ class KadeHUD extends BaseHUD
 		timeBar.exists = updateTime;
 		timeTxt.exists = updateTime;
 
+		var diffId:String = PlayState.difficultyName;
+		var diffName:String = Paths.getString('difficultyName_$diffId', diffId);
+		
 		if (ClientPrefs.timeBarType == "Song Name")
 		{
 			timeTxt.text = displayedSong;
-			watermark.text = engineName;
+			watermark.text = '$diffName | $engineName';
 		}
 		else
 		{
-			var diffId:String = PlayState.difficultyName;
-			var diffName:String = Paths.getString('difficultyName_$diffId', diffId);
-
 			watermark.text = '$displayedSong - $diffName | $engineName';
 			timeTxt.text = "";
 		}

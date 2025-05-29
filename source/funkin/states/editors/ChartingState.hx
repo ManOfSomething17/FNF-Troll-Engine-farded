@@ -7,7 +7,7 @@ import funkin.scripts.FunkinHScript;
 import funkin.scripts.FunkinScript;
 
 import funkin.Conductor.BPMChangeEvent;
-import funkin.data.Section;
+import funkin.data.BaseSong;
 import funkin.data.Song;
 
 import funkin.objects.notes.*;
@@ -251,8 +251,7 @@ class ChartingState extends MusicBeatState
 
 	public var playbackSpeed(default, set):Float = 1.0;
 	@:noCompletion function set_playbackSpeed(val:Float){
-		for (track in soundTracksMap)
-			track.pitch = val;
+		Conductor.changePitch(val);
 		return playbackSpeed = val;
 	}
 
@@ -321,6 +320,8 @@ class ChartingState extends MusicBeatState
 	{
 		instance = this;
 		
+		FlxTransitionableState.skipNextTransOut = true;
+
 		persistentUpdate = true;
 		persistentDraw = true;
 
@@ -1151,14 +1152,11 @@ class ChartingState extends MusicBeatState
 			key++;
 		}
 
-		#if (sys && (hscript || LUA_ALLOWED))
+		#if (sys && (hscript))
 		var directories:Array<String> = Paths.getFolders('notetypes');
 		var allowedFormats = [
 			#if hscript
 			'.hscript',
-			#end
-			#if LUA_ALLOWED
-			'.lua'
 			#end
 		];
 		for (directory in directories)
@@ -1242,7 +1240,7 @@ class ChartingState extends MusicBeatState
 
 		descText = new FlxText(20, 200, 0, eventStuff[0][0]);
 		
-		#if (sys && (hscript || LUA_ALLOWED))
+		#if (sys && (hscript))
 		var eventsLoaded:Map<String, Bool> = new Map();
 		var directories:Array<String> = Paths.getFolders('events');
 		for (directory in directories)
@@ -1696,7 +1694,13 @@ class ChartingState extends MusicBeatState
 		}
 
 		for (trackName in songTrackNames) {
-			var file:Sound = Paths.track(currentSongName, trackName);
+			var file:Sound = {
+				if (PlayState.song != null)
+					PlayState.song.getTrackSound(trackName);
+				else
+					Paths.track(currentSongName, trackName);
+			}
+
 			if (file == null || file.length <= 0) 
 				continue;
 
@@ -1907,15 +1911,6 @@ class ChartingState extends MusicBeatState
 		if (tracksCompleted){
 			tracksCompleted = false;
 			trace("track completed");
-			var pre:Float;
-			for (snd in tracks){
-				pre = snd.volume;
-				snd.volume = 0.0;
-				snd.play();
-				snd.pause();
-				snd.time = 0.0;
-				snd.volume = pre;
-			}
 			changeSection(0, true);
 		}
 
@@ -2020,7 +2015,7 @@ class ChartingState extends MusicBeatState
 
 		if (checkInputBlocked() != inputBlocked) {
 			inputBlocked = !inputBlocked;
-			StartupState.specialKeysEnabled = !inputBlocked;
+			FNFGame.specialKeysEnabled = !inputBlocked;
 		}
 
 		if (!inputBlocked) {
@@ -2033,7 +2028,7 @@ class ChartingState extends MusicBeatState
 		}
 
 		if (Conductor.playing) {
-			updateSongPosition(elapsed);
+			updateSongPosition();
 
 			if (Conductor.songPosition > inst.length)
 				changeSection(0, true);
@@ -2854,12 +2849,8 @@ class ChartingState extends MusicBeatState
 		if(notetype == '') return;
 		if(notetypeScripts.exists(notetype)) return;
 
-		#if PE_MOD_COMPATIBILITY
-		for (file in ["notetypes", "custom_notetypes"]) {
-			var baseScriptFile:String = '$file/$notetype';
-		#else
+		{
 			var baseScriptFile:String = 'notetypes/$notetype';
-		#end
 			var exts = Paths.HSCRIPT_EXTENSIONS; // TODO: maybe FunkinScript.extensions, FunkinScript.hscriptExtensions and FunkinScript.luaExtensions??
 			for (ext in exts)
 			{
@@ -2875,9 +2866,7 @@ class ChartingState extends MusicBeatState
 					}
 				}
 			}
-		#if PE_MOD_COMPATIBILITY
 		}
-		#end
 	}
 
 	function setupNoteData(i:Array<Dynamic>, isNextSection:Bool):Note
@@ -3263,9 +3252,9 @@ class ChartingState extends MusicBeatState
 		var fileName:String;
 		var _song:SwagSong = Reflect.copy(_song);
 
-		if (Reflect.hasField(_song, "path")) {
-			fileName = haxe.io.Path.withoutDirectory(_song.path);
-			Reflect.deleteField(_song, "path");
+		if (Reflect.hasField(_song, "_path")) {
+			fileName = haxe.io.Path.withoutDirectory(Reflect.field(_song, "_path"));
+			Reflect.deleteField(_song, "_path");
 		}else {
 			fileName = Paths.formatToSongPath(_song.song) + ".json";
 		}
@@ -3283,13 +3272,10 @@ class ChartingState extends MusicBeatState
 		}
 	}
 
+	/*
 	private function saveMetadata(){
-		var metadata = _song.metadata;
-		if(metadata==null){
-			metadata = {
-				artist: "Unspecified",
-				charter: "Unspecified"
-			}
+		var metadata = metadata ?? {
+			songName: "Unspecified",
 		}
 		var data:String = Json.stringify(metadata, "\t");
 
@@ -3302,6 +3288,7 @@ class ChartingState extends MusicBeatState
 			_file.save(data.trim(), "metadata.json");
 		}
 	}
+	*/
 
 	private function saveEvents()
 	{

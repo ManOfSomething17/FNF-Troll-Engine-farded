@@ -133,10 +133,7 @@ class Stage extends FlxTypedGroup<FlxBasic>
 			*/
 			
 			if (stageScript != null){
-				if (stageScript is FunkinLua)
-					stageScript.call("onCreate", []);
-				else
-					stageScript.call("onLoad", [this, foreground]);
+				stageScript.call("onLoad", [this, foreground]);
 			}
 
 			stageBuilt = true;
@@ -247,6 +244,7 @@ class Stage extends FlxTypedGroup<FlxBasic>
 }
 
 class StageData {
+	/*
 	public static var forceNextDirectory:String = null;
 
 	public static function loadDirectory(SONG:SwagSong) {
@@ -260,6 +258,7 @@ class StageData {
 		// preventing crashes
 		forceNextDirectory = stageFile == null ? '' : stageFile.directory;
 	}
+	*/
 	
 	public static function getStageFile(stageId:String):Null<StageFile> 
 	{

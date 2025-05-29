@@ -1,8 +1,7 @@
 // conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem conductor we have a problem
 package funkin;
 
-import funkin.data.Song.SwagSong;
-import funkin.data.Section.SwagSection;
+import funkin.data.BaseSong;
 
 typedef BPMChangeEvent =
 {
@@ -28,7 +27,6 @@ class Conductor
 
 	public static var safeZoneOffset:Float = ClientPrefs.hitWindow;
 	public static var visualPosition:Float = 0;
-	public static var lastSongPos:Float;
 
 	/** Whether the song is currently playing. Use startSong and pauseSong to change this **/
 	public static var playing(default, null):Bool = false;
@@ -107,6 +105,7 @@ class Conductor
 
 		Conductor.songPosition = 0;
 		Conductor.playing = false;
+		Conductor.pitch = 1.0;
 		Conductor.bpmChangeMap = [];
 		Conductor.tracks = [];
 	}

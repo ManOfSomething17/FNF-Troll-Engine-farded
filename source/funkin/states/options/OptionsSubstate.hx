@@ -137,8 +137,8 @@ class OptionsSubstate extends MusicBeatSubstate
 			]
 		],
 		"video" => [
-			["video", ["shaders", "showFPS"]],
-			["display", ["framerate", #if FUNNY_ALLOWED "bread" #end]],
+			["video", ["shaders", "showFPS", "showMemory"]],
+			["display", ["framerate", #if FUNNY_ALLOWED "bread", "fish" #end]],
 			[
 				"performance",
 				[
@@ -341,6 +341,9 @@ class OptionsSubstate extends MusicBeatSubstate
 			case 'showFPS':
 				if (Main.fpsVar != null)
 					Main.fpsVar.visible = val;
+			case 'showMemory':
+				if (Main.fpsVar != null)
+					Main.fpsVar.showMemory = val;
 			#if FUNNY_ALLOWED
 			case 'bread':
 				if (Main.bread != null)
@@ -1861,8 +1864,7 @@ class TextFormats {
 	public static final TAB_NAME:FlxTextFormatData = {
 		font: "vcr.ttf",
 		pixelPerfectRender: true,
-		antialiasing: false,
-	
+
 		size: 32,
 		color: 0xFFFFFFFF,
 		alignment: CENTER
@@ -1870,9 +1872,8 @@ class TextFormats {
 	
 	public static final OPT_LABEL:FlxTextFormatData = {
 		font: "vcr.ttf",
-		pixelPerfectRender: true,
-		antialiasing: false,
-	
+		pixelPerfectRender: true,	
+		
 		size: 32,
 		color: 0xFFFFFFFF,
 		alignment: LEFT
@@ -1900,9 +1901,7 @@ class TextFormats {
 
 	public static final OPT_DESC:FlxTextFormatData = {
 		font: "vcr.ttf",
-		pixelPerfectRender: true,
-		antialiasing: false,
-	
+		pixelPerfectRender: true,	
 		size: 16,
 		color: 0xFFFFFFFF,
 		alignment: CENTER,

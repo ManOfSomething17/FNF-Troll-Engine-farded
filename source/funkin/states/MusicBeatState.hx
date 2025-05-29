@@ -127,8 +127,15 @@ class MusicBeatState extends FlxUIState
 	}
 	
 	private var lastMixTimer:Float = 0;
-	private function updateSongPosition(elapsed:Float):Void {
-		var inst = Conductor.tracks[0];
+	private var lastMixPos:Float = 0;
+
+	private function updateSongPosition(?inst:FlxSound):Void {
+		inst ??= Conductor.tracks[0];
+		if (inst == null) return;
+
+		@:privateAccess
+		var elapsedMS:Float = FlxG.game._elapsedMS * inst.pitch;
+
 		switch (songSyncMode)
 		{
 			case DIRECT:
@@ -139,13 +146,13 @@ class MusicBeatState extends FlxUIState
 			case LEGACY:
 				// Resync Vocals
 				// FUCKING SUCKS DONT USE LMFAO! It's here just incase though
-				Conductor.songPosition += elapsed * 1000;
+				Conductor.songPosition += elapsedMS;
 				
 			case PSYCH_1_0:
 				// Psych 1.0 method
 				// Since this works better for Rico so might work better for some other machines too
-				Conductor.songPosition += elapsed * 1000;
-				Conductor.songPosition = FlxMath.lerp(inst.time, Conductor.songPosition, Math.exp(-elapsed * 5));
+				Conductor.songPosition += elapsedMS;
+				Conductor.songPosition = FlxMath.lerp(inst.time, Conductor.songPosition, Math.exp(-elapsedMS * 0.005));
 				var timeDiff:Float = Math.abs(inst.time - Conductor.songPosition);
 				if (timeDiff > 1000)
 					Conductor.songPosition = Conductor.songPosition + 1000 * FlxMath.signOf(timeDiff);
@@ -156,13 +163,14 @@ class MusicBeatState extends FlxUIState
 			case LAST_MIX:
 				// Stepmania method
 				// Works for most people it seems??
-				if (Conductor.lastSongPos != inst.time) {
-					Conductor.lastSongPos = inst.time;
+				if (lastMixPos != inst.time) {
+					lastMixPos = inst.time;
 					lastMixTimer = 0;
-				}else
-					lastMixTimer += elapsed * 1000;
+				}else {
+					lastMixTimer += elapsedMS;
+				}
 				
-				Conductor.songPosition = inst.time + lastMixTimer;
+				Conductor.songPosition = lastMixPos + lastMixTimer;
 
 		}
 	}
@@ -282,7 +290,7 @@ class MusicBeatState extends FlxUIState
 
 	function resyncTracks() {
 		Conductor.resyncTracks();
-		Conductor.lastSongPos = Conductor.songPosition;
+		lastMixPos = Conductor.songPosition;
 	}
 
 	public function stepHit():Void

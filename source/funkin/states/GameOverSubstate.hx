@@ -180,7 +180,7 @@ class GameOverSubstate extends MusicBeatSubstate
 			return doGenericGameOver();
 		}
 
-		var deathName:String = (characterName != null) ? characterName : (char.characterId + "-dead");
+		var deathName:String = characterName ?? (char.deathId + "-dead");
 		var charInfo = CharacterData.getCharacterFile(deathName);
 
 		if (charInfo == null){
@@ -195,15 +195,8 @@ class GameOverSubstate extends MusicBeatSubstate
 		}
 
 		////		
-		Cache.loadWithList([
-			{path: charInfo.image, type: 'IMAGE'},
-			{path: deathSoundName, type: 'SOUND'},
-			{path: loopSoundName, type: 'MUSIC'},
-			{path: endSoundName, type: 'MUSIC'}
-		]);
-
-		_musicAsset = Paths.music(loopSoundName);
-
+		Cache.loadWithList([{path: charInfo.image, type: 'IMAGE'}]);
+		
 		boyfriend = new Character(
 			char.x - char.positionArray[0], 
 			char.y - char.positionArray[1], 
@@ -215,6 +208,14 @@ class GameOverSubstate extends MusicBeatSubstate
 		boyfriend.x += boyfriend.positionArray[0];
 		boyfriend.y += boyfriend.positionArray[1];
 		add(boyfriend);
+
+		Cache.loadWithList([
+			{path: deathSoundName, type: 'SOUND'},
+			{path: loopSoundName, type: 'MUSIC'},
+			{path: endSoundName, type: 'MUSIC'}
+		]);
+		
+		_musicAsset = Paths.music(loopSoundName);
 
 		camFollow = boyfriend.getGraphicMidpoint();
 		camFollowPos = new FlxObject(game.camFollowPos.x, game.camFollowPos.y);

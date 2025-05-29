@@ -117,9 +117,9 @@ class AdvancedHUD extends CommonHUD
 		
 	}
 
-	override public function new(iP1:String, iP2:String, songName:String, stats:Stats)
+	override public function new(songName:String, stats:Stats)
 	{
-		super(iP1, iP2, songName, stats);
+		super(songName, stats);
 
 		stats.changedEvent.add(statChanged);
 		
@@ -407,10 +407,10 @@ class AdvancedHUD extends CommonHUD
 	
 	override function noteJudged(judge:JudgmentData, ?note:Note, ?field:PlayField)
 	{
-		var hitTime = note.strumTime - Conductor.songPosition + ClientPrefs.ratingOffset;
-
+		var hitDiff = note.hitResult.hitDiff + ClientPrefs.ratingOffset;
 		if (ClientPrefs.hitbar)
-			hitbar.addHit(-hitTime);
+			hitbar.addHit(hitDiff);
+
 		if (ClientPrefs.scoreZoom)
 		{
 			FlxTween.cancelTweensOf(scoreTxt.scale);
