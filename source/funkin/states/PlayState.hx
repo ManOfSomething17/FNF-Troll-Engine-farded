@@ -97,16 +97,17 @@ all notes will also store their visualPos in a variable when creation and then w
 
 EDIT: not EXACTLY how it works but its a good enough summary
 */
-typedef SpeedEvent =
+@:structInit
+class SpeedEvent
 {
-	position:Float, // the y position where the change happens (modManager.getVisPos(songTime))
-	startTime:Float, // the song position (conductor.songTime) where the change starts
+	public var position:Float; // the y position where the change happens (modManager.getVisPos(songTime))
+	public var startTime:Float; // the song position (conductor.songTime) where the change starts
 	#if EASED_SVs
-	startSpeed:Float, // the previous event's speed
-	?endTime:Float, // the song position (conductor.songTime) when the change ends
-	?easeFunc:EaseFunction,
+	public var startSpeed:Float; // the previous event's speed
+	public var endTime:Null<Float> = null; // the song position (conductor.songTime) when the change ends
+	public var easeFunc:EaseFunction = FlxEase.linear;
 	#end
-	speed:Float // speed mult after the change
+	public var speed:Float; // speed mult after the change
 }
 
 @:noScripting
@@ -636,7 +637,7 @@ class PlayState extends MusicBeatState
 		Conductor.songPosition = Conductor.crochet * -5;
 		Conductor.updateSteps();
 
-		metadata = SONG.metadata ?? (song?.getMetadata(difficultyName));
+		metadata = SONG.metadata ??= (song?.getMetadata(difficultyName));
 		if (showDebugTraces && metadata == null)
 			trace('No metadata for $songId. Maybe add some?');
 
@@ -1863,7 +1864,7 @@ class PlayState extends MusicBeatState
 
 	public function getTimeFromSV(time:Float, event:SpeedEvent):Float {
 		#if EASED_SVs
-		var func:EaseFunction = event.easeFunc == null ? FlxEase.linear : event.easeFunc;
+		var func:EaseFunction = event.easeFunc;
 		if (event.endTime != null) {
 			var timeElapsed:Float = FlxMath.remapToRange(time, event.startTime, event.endTime, 0, 1);
 			if(timeElapsed > 1)timeElapsed = 1;
@@ -1941,7 +1942,7 @@ class PlayState extends MusicBeatState
 				}
 				#if EASED_SVs
 				var endTime:Null<Float> = null;
-				var easeFunc:Null<EaseFunction> = null;
+				var easeFunc:EaseFunction = FlxEase.linear;
 
 				var tweenOptions = event.value2.split("/");
 				if(tweenOptions.length >= 1){
@@ -3681,6 +3682,12 @@ class PlayState extends MusicBeatState
 	function commonNoteHit(note:Note, field:PlayField){ // things done by all note hit functions
 		camZooming = true;
 
+		if (note.noteScript != null && callScript(note.noteScript, "onCommonNoteHitPre", [note, field]) == Globals.Function_Stop)
+			return;
+
+		if (callOnHScripts("onCommonNoteHitPre", [note, field]) == Globals.Function_Stop)
+			return;
+
 		note.wasGoodHit = true;
 
 		for (track in field.tracks)
@@ -3702,6 +3709,10 @@ class PlayState extends MusicBeatState
 			if (spr != null && (field.keysPressed[note.column] || note.isRoll))
 				spr.playAnim('confirm', true, note.isSustainNote ? note.parent : note);
 		}
+		if (note.noteScript != null)
+			callScript(note.noteScript, "onCommonNoteHit", [note, field]);
+
+		callOnHScripts("onCommonNoteHit", [note, field]);
 	}
 
 	inline function playShithound(){
