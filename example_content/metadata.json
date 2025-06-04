@@ -4,10 +4,15 @@
 			"name": "Example",
 			"category": "main",
 			"unlockCondition": true,
-			"songs": ["test"]
+			"songs": ["Test"]
 		}
 	],
-	"freeplaySongs": ["test"],
+	"freeplaySongs": [
+		{
+			"name": "Test",
+			"category": "main"
+		}
+	],
 	"titleStages": [
 		"example_stage"
 	]

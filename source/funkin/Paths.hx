@@ -645,11 +645,7 @@ class Paths
 				var rawJson:Null<String> = Paths.getContent('$folderPath/metadata.json');
 				if (rawJson != null && rawJson.length > 0) {
 					var data:Dynamic = Json.parse(rawJson);
-					#if ALLOW_DEPRECATION
 					contentMetadata.set(folderName, updateContentMetadataStructure(data));
-					#else
-					contentMetadata.set(folderName, data);
-					#end
 					return;
 				}
 			}
@@ -658,40 +654,12 @@ class Paths
 	
 	inline static function updateContentMetadataStructure(data:Dynamic):ContentMetadata
 	{
-		inline function getFreeplaySongs():Array<String> {
-			var list:Array<String> = [];
-			
-			var fs:Dynamic = Reflect.field(data, "freeplaySongs");
-			if (fs is Array) {
-				var fs:Array<Dynamic> = cast fs;
-				
-				if (fs.length == 0) {
-					// none
-				}else if (fs[0] is String) {
-					for (s in fs) list.push(Std.string(s));
-				}
-				else if (Reflect.isObject(fs[0])) {
-					for (s in fs) {
-						var v = Reflect.field(s, "name");
-						if (v != null) list.push(Std.string(v));
-					}
-				}
-			}
-			
-			return list;
-		}
-
-		if (Reflect.hasField(data, "freeplaySongs"))
-			Reflect.setField(data, "freeplaySongs", getFreeplaySongs());
-		else
-			Reflect.setField(data, "freeplaySongs", []);
-
-		////
 		if (Reflect.field(data, "weeks") != null)
-			return data; // valid ig
+			return data; // You are valid :)
 
-		if (Reflect.hasField(data, "chapters")) { // TGT
-			Reflect.setField(data, "weeks", Reflect.field(data, "chapters"));
+		var chapters:Dynamic = Reflect.field(data, "chapters");
+		if (chapters != null) { // TGT
+			Reflect.setField(data, "weeks", chapters);
 			Reflect.deleteField(data, "chapters");
 			return data;
 		}else { // Lets assume it's an old TGT metadata
@@ -869,6 +837,24 @@ class HTML5Paths {
 	#end
 }
 
+typedef FreeplaySongMetadata = {
+	/**
+		Name of the song to be played
+	**/
+	var name:String;
+
+	/**
+		Category ID for the song to be placed into (main, side, remix)
+	**/
+	var category:String;
+
+	/**
+		Displayed name of the song.
+		Does not have to be the same as name.
+	**/
+	@:optional var displayName:String;
+}
+
 typedef FreeplayCategoryMetadata = {
 	/**
 		Displayed Name of the category
@@ -903,7 +889,7 @@ typedef ContentMetadata = {
 	/**
 		Songs to be placed into the freeplay menu
 	**/
-	@:optional var freeplaySongs:Array<String>;
+	@:optional var freeplaySongs:Array<FreeplaySongMetadata>;
 
 	/**
 		Categories to be placed into the freeplay menu
