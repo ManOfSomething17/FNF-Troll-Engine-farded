@@ -11,8 +11,10 @@ import funkin.objects.notes.StrumNote;
 import funkin.objects.Fish;
 import funkin.objects.Stage;
 import funkin.objects.Character;
-import funkin.objects.RatingGroup;
+import funkin.objects.huds.*;
 import funkin.objects.hud.*;
+import funkin.objects.hud.RatingGroup;
+import funkin.objects.hud.Countdown;
 import funkin.objects.playfields.*;
 import funkin.data.Stats;
 import funkin.data.JudgmentManager;
@@ -1375,13 +1377,13 @@ class PlayState extends MusicBeatState
 			return;
 
 		// Do the countdown.
-		var countdown = new funkin.objects.Countdown(this);
+		var countdown = new Countdown(this);
 		resetCountdown(countdown);
 		countdown.start(Conductor.crochet * 0.001); // time is optional but here we are
 		curCountdown = countdown;
 	}
 
-	public function resetCountdown(countdown:funkin.objects.Countdown):Void {
+	public function resetCountdown(countdown:Countdown):Void {
 		if (countdown == null) return;
 		// I don't wanna break scripts so if you have a better way, do it
 		if (countdown.introAlts != introAlts) countdown.introAlts = introAlts;
@@ -2373,8 +2375,10 @@ class PlayState extends MusicBeatState
 		}
 
 		////
-		for (idx in 0...playfields.members.length)
-			playfields.members[idx].noteField.songSpeed = songSpeed;
+		for (idx in 0...playfields.members.length) {
+			var field = playfields.members[idx];
+			field.noteField.songSpeed = songSpeed;
+		}
 		
 		/*
 		for (script in notetypeScripts)
@@ -3186,7 +3190,20 @@ class PlayState extends MusicBeatState
 				numSpr.moves = false;
 
 				numSpr.scale.copyFrom(ratingGroup.comboTemplate.scale);
-				numSpr.tween = FlxTween.tween(numSpr.scale, {x: numSpr.scale.x, y: numSpr.scale.y}, 0.2, {ease: FlxEase.circOut});
+				numSpr.tween = FlxTween.tween(numSpr.scale, {x: numSpr.scale.x, y: numSpr.scale.y}, 0.2, {
+					ease: FlxEase.circOut,
+					onComplete: function(tween:FlxTween) {
+						if (!numSpr.alive)
+							return;
+	
+						var stepDur = (Conductor.stepCrochet * 0.001);
+						numSpr.tween = FlxTween.tween(numSpr, {alpha: 0.0}, stepDur, {
+							startDelay: Math.min((stepDur * 8) - 0.1, 0.0),
+							ease: FlxEase.quadIn,
+							onComplete: (tween:FlxTween) -> numSpr.kill()
+						});
+					}
+				});
 
 				numSpr.scale.x *= 1.25;
 				numSpr.updateHitbox();
@@ -3225,6 +3242,10 @@ class PlayState extends MusicBeatState
 		songHits++;
 
 		stats.calculateAccuracy(judgeData, diff); // deals with accuracy calculations
+
+		if (perfectMode && stats.totalNotesHit < stats.totalPlayed) 
+			doDeathCheck(true);
+		
 
 		switch(judgeData.comboBehaviour){
 			default:
@@ -3323,7 +3344,7 @@ class PlayState extends MusicBeatState
 			timingTxt.x += ClientPrefs.comboOffset[4];
 			timingTxt.y -= ClientPrefs.comboOffset[5];
 
-			timingTxt.color = hud.judgeColours.get(judgeData.internalName);
+			timingTxt.color = hud.judgeColours.get(judgeData.internalName) ?? 0xFF477947;
 
 			timingTxt.visible = true;
 			timingTxt.alpha = ClientPrefs.judgeOpacity;
@@ -3456,12 +3477,9 @@ class PlayState extends MusicBeatState
 
 			field.keysPressed[column] = false;
 			
-			if (!field.isHolding[column]) {
-				var spr:StrumNote = field.strumNotes[column];
-				if (spr != null){
-					spr.playAnim('static');
-					spr.resetAnim = 0;
-				}
+			var spr:StrumNote = field.strumNotes[column];
+			switch(spr?.animation.name) {
+				case 'pressed' | 'confirm': spr.resetAnim = -1;
 			}
 		}
 
@@ -3698,17 +3716,13 @@ class PlayState extends MusicBeatState
 			char.playNote(note, field);
 		
 		// Strum animations
-		if (field.autoPlayed) {
-			var time:Float = 0.15;
-			if (note.isSustainNote && !note.isSustainEnd)
-				time += 0.15;
-
-			StrumPlayAnim(field, note.column % field.keyCount, time, note);
-		} else {
-			var spr = field.strumNotes[note.column];
-			if (spr != null && (field.keysPressed[note.column] || note.isRoll))
-				spr.playAnim('confirm', true, note.isSustainNote ? note.parent : note);
+		var spr:StrumNote = field.strumNotes[note.column];
+		if (spr != null) {
+			spr.playAnim('confirm', true, note.isSustainNote ? note.parent : note);
+			spr.resetAnim = field.autoPlayed ? -1 : 0;
 		}
+		
+		////
 		if (note.noteScript != null)
 			callScript(note.noteScript, "onCommonNoteHit", [note, field]);
 
@@ -4032,15 +4046,6 @@ class PlayState extends MusicBeatState
 	inline public function callOnHScripts(event:String, ?args:Array<Dynamic>, ?vars:Map<String, Dynamic>, ignoreStops = false, ?exclusions:Array<String>):Dynamic
 		return Globals.Function_Continue;
 	#end
-
-	function StrumPlayAnim(field:PlayField, id:Int, time:Float, ?note:Note) {
-		var spr:StrumNote = field.strumNotes[id];
-
-		if (spr != null) {
-			spr.playAnim('confirm', true, note);
-			spr.resetAnim = time;
-		}
-	}
 
 	public function RecalculateRating() {
 		setOnScripts('score', stats.score);

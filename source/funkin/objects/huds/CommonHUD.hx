@@ -1,4 +1,4 @@
-package funkin.objects.hud;
+package funkin.objects.huds;
 
 import funkin.objects.playfields.*;
 import funkin.objects.hud.FNFHealthBar;
@@ -71,7 +71,7 @@ class CommonHUD extends BaseHUD
 		add(timeTxt);
 		useSubtleMark = ClientPrefs.botplayMarker == 'Subtle';
 
-		botplayText.active = botplayText.visible = ClientPrefs.botplayMarker == 'Psych';
+		botplayText.active = botplayText.visible = ClientPrefs.botplayMarker == 'Obvious';
 		add(botplayText);
 	}
 
@@ -202,7 +202,7 @@ class CommonHUD extends BaseHUD
 		healthBar.iconP2.y = healthBar.y + (healthBar.height - healthBar.iconP2.height) / 2;
 		healthBar.real_alpha = healthBar.real_alpha;
 
-		botplayText.active = botplayText.visible = ClientPrefs.botplayMarker == 'Psych';
+		botplayText.active = botplayText.visible = ClientPrefs.botplayMarker == 'Obvious';
 		useSubtleMark = ClientPrefs.botplayMarker == 'Subtle';
 
 		updateTimeBarType();

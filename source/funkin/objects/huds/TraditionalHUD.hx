@@ -1,4 +1,4 @@
-package funkin.objects.hud;
+package funkin.objects.huds;
 
 import math.CoolMath;
 import funkin.objects.hud.JudgementCounter.JudgementCounters;
@@ -172,7 +172,7 @@ class TraditionalHUD extends CommonHUD
 		isHighscore = songWifeHighscore != 0 && totalNotesHit > songWifeHighscore;
 	}
 
-	inline function getStatusText():String {
+	function getStatusText():String {
 		if (PlayState.instance.cpuControlled && useSubtleMark)
 			return botplayString;
 
