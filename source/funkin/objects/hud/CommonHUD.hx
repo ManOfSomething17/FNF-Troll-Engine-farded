@@ -49,19 +49,19 @@ class CommonHUD extends BaseHUD
 		timeTxt = new FlxText(FlxG.width * 0.5 - 200, 0, 400, "", 32);
 		timeTxt.setFormat(Paths.font("vcr.ttf"), 32, 0xFFFFFFFF, CENTER, FlxTextBorderStyle.OUTLINE, 0xFF000000);
 		timeTxt.scrollFactor.set();
-		timeTxt.borderSize = 2;
+		// timeTxt.borderSize = 2;
 
 		var timeBarGraphic = Paths.image('timeBar');
 		if (timeBarGraphic == null)
-			timeBarGraphic = CoolUtil.makeOutlinedGraphic(400, 20, 0xFFFFFFFF, 5, 0xFF000000);
+			timeBarGraphic = CoolUtil.makeOutlinedGraphic(500, 25, 0xFFFFFFFF, 2, 0xFF000000);
 
 		timeBarBG = new FlxSprite((FlxG.width - timeBarGraphic.width) / 2, 0, timeBarGraphic);
 		timeBarBG.color = FlxColor.BLACK;
 		timeBarBG.scrollFactor.set();
 
-		timeBar = new FlxBar(timeBarBG.x + 5, 0, LEFT_TO_RIGHT, Std.int(timeBarBG.width - 10), Std.int(timeBarBG.height - 10), this, 'songPercent', 0, 1);
-		timeBar.createFilledBar(0xFF000000, 0xFFFFFFFF);
-		timeBar.numDivisions = 800; // How much lag this causes?? Should i tone it down to idk, 400 or 200?
+		timeBar = new FlxBar(timeBarBG.x + 2, 0, LEFT_TO_RIGHT, Std.int(timeBarBG.width - 4), Std.int(timeBarBG.height - 4), this, 'songPercent', 0, 1);
+		timeBar.createFilledBar(0xFF000000, (freeplayBgColor!=null) ? FlxColor.fromString(freeplayBgColor) : 0xFFFFFFFF);
+		timeBar.numDivisions = Std.int(timeBar.width * 2);
 		timeBar.scrollFactor.set();
 
 		updateTimeBarType();
@@ -86,6 +86,13 @@ class CommonHUD extends BaseHUD
 			
 			healthBar.updateBar();
 		}
+
+		if (timeBar != null)
+		{
+			timeBar.createGradientBar([FlxColor.fromRGB(0, 0, 0)], [bfColor, dadColor]);
+
+			timeBar.updateBar();
+		}
 	}
 
 
@@ -99,22 +106,22 @@ class CommonHUD extends BaseHUD
 		timeBarBG.exists = updateTime;
 		timeBar.exists = updateTime;
 
-		if (ClientPrefs.timeBarType == 'Song Name')
-		{
-			timeTxt.text = displayedSong;
-			timeTxt.size = 24;
-			timeTxt.offset.y = -3;
-		}
-		else
-		{
-			timeTxt.text = "";
-			timeTxt.size = 32;
-			timeTxt.offset.y = 0;
-		}
+		// if (ClientPrefs.timeBarType == 'Song Name')
+		// {
+		timeTxt.text = displayedSong;
+		timeTxt.size = 16;
+		// timeTxt.offset.y = -3;
+		// }
+		// else
+		// {
+			// timeTxt.text = "";
+			// timeTxt.size = 32;
+			// timeTxt.offset.y = 0;
+		// }
 
-		timeTxt.y = ClientPrefs.downScroll ? (FlxG.height - 44) : 19;
-		timeBarBG.y = timeTxt.y + (timeTxt.height * 0.25);
-		timeBar.y = timeBarBG.y + 5;
+		timeBarBG.y = ClientPrefs.downScroll ? (FlxG.height - 30) : 10;
+		timeTxt.y = timeBarBG.y + 4;
+		timeBar.y = timeBarBG.y + 2;
 
 		updateTimeBarAlpha();
 	}
@@ -163,7 +170,7 @@ class CommonHUD extends BaseHUD
 			switch (ClientPrefs.timeBarType)
 			{
 				case "Percentage":
-					timeTxt.text = Math.floor(songPercent * 100) + "%";
+					timeTxt.text = '$displayedSong (${Math.floor(songPercent * 100) + "%"})';
 				case "Time Left":
 					timeCalc = (songLength - time);
 				case "Time Elapsed":
@@ -173,9 +180,9 @@ class CommonHUD extends BaseHUD
 			if (timeCalc != null)
 			{
 				if (timeCalc <= 0)
-					timeTxt.text = "0:00"
+					timeTxt.text = '$displayedSong (0:00)'
 				else
-					timeTxt.text = FlxStringUtil.formatTime(timeCalc / FlxG.timeScale / 1000, false);
+					timeTxt.text = '$displayedSong (${FlxStringUtil.formatTime(timeCalc / FlxG.timeScale / 1000, false)})';
 			}
 		}
 

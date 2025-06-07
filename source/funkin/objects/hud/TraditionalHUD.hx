@@ -180,16 +180,16 @@ class TraditionalHUD extends CommonHUD
 
 		if (!showJudgeCounter) 
 			text += separator + getComboBreaksText();
-		
-		if (ClientPrefs.npsDisplay)
-			text += separator + getNPSText();
 
 		if (grade != "?") {
 			text += separator + getRatingText();
-			text += separator + getClearTypeText();
 		}
 		
 		text += separator + getGradeText();
+		if (grade != "?") text += ' ' + getClearTypeText();
+		
+		if (ClientPrefs.npsDisplay)
+			text += separator + getNPSText();
 
 		return text;
 	}
@@ -211,6 +211,7 @@ class TraditionalHUD extends CommonHUD
 
 	inline function getClearTypeText():String
 	{
+		refreshFCColour();
 		var clearType:String = ratingFC;
 
 		if (stats.accuracySystem == WIFE3 && clearType == stats.gfc)
@@ -302,8 +303,6 @@ class TraditionalHUD extends CommonHUD
 				}
 			});
 		}
-		
-		refreshFCColour();
 	}
 
 	function statChanged(stat:String, val:Dynamic)

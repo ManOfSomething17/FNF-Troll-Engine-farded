@@ -75,6 +75,8 @@ class BaseHUD extends FlxSpriteGroup
 	public var songPercent(default, set):Float = 0;	
 	public var displayedHealth(default, set):Float = 0;
 
+	public var freeplayBgColor(get, null):String;
+
 	public var score(get, null):Float = 0;
 	public var comboBreaks(get, null):Float = 0;
 	public var misses(get, null):Int = 0;
@@ -115,6 +117,7 @@ class BaseHUD extends FlxSpriteGroup
 	public function songEnding(){}
 
 	function get_displayedSong() return PlayState.instance.displayedSong;
+	function get_freeplayBgColor() return PlayState.instance.metadata.freeplayBgColor;
 	function get_score() return stats.score;
 	function get_comboBreaks() return stats.comboBreaks;
 	function get_misses() return stats.misses;
