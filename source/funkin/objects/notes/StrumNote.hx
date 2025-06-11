@@ -132,11 +132,10 @@ class StrumNote extends NoteObject
 				resetAnim = 0;
 				playAnim('static');
 			}
-		}else if (resetAnim < 0 && animation.finished) {
-			resetAnim = 0;
-			playAnim('static');
 		}
 
+		if (animation.name == 'confirm') 
+			centerOrigin();	
 		super.update(elapsed);
 	}
 
