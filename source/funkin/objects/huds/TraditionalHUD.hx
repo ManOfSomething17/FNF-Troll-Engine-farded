@@ -183,11 +183,11 @@ class TraditionalHUD extends CommonHUD
 
 		if (grade != "?") {
 			text += separator + getRatingText();
+			text += separator + getClearTypeText();
 		}
 		
 		text += separator + getGradeText();
-		if (grade != "?") text += ' ' + getClearTypeText();
-		
+
 		if (ClientPrefs.npsDisplay)
 			text += separator + getNPSText();
 
@@ -267,7 +267,7 @@ class TraditionalHUD extends CommonHUD
 		{
 			formatting = new FlxTextFormat(clearFlagColor, false, false, 0xFF000000);
 			funnyFormat = new FlxTextFormatMarkerPair(formatting, "<fc>");
-
+			
 			scoreTxt.text = getStatusText();
 
 			scoreTxt.applyMarkup(scoreTxt.text, [funnyFormat]);
