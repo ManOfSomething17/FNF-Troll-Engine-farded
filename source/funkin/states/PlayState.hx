@@ -24,18 +24,20 @@ import funkin.states.GameOverSubstate;
 import funkin.states.PauseSubState;
 import funkin.modchart.Modifier;
 import funkin.modchart.ModManager;
-import funkin.states.editors.*;
-import funkin.states.options.*;
+import funkin.states.editors.CharacterEditorState;
+import funkin.states.editors.ChartingState;
+import funkin.states.options.OptionsSubstate;
 import funkin.scripts.*;
 import funkin.scripts.Util;
 import funkin.scripts.Util as ScriptingUtil;
 import funkin.scripts.FunkinScript.ScriptType;
 import flixel.*;
 import flixel.util.*;
-import flixel.util.FlxSignal.FlxTypedSignal;
+import flixel.util.FlxSignal;
 import flixel.math.*;
 import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
+import flixel.system.FlxAssets.FlxSoundAsset;
 import flixel.addons.transition.FlxTransitionableState;
 import flixel.group.FlxGroup;
 import flixel.group.FlxSpriteGroup;
@@ -46,9 +48,11 @@ import flixel.ui.FlxBar;
 
 import haxe.Json;
 
+#if lime_openal
 import lime.media.openal.AL;
 import lime.media.openal.ALFilter;
 import lime.media.openal.ALEffect;
+#end
 
 import openfl.events.KeyboardEvent;
 import openfl.filters.BitmapFilter;
@@ -238,8 +242,10 @@ class PlayState extends MusicBeatState
 	
 	public var hitsound:FlxSound;
 
+	#if lime_openal
 	public var sndFilter:ALFilter = AL.createFilter();
 	public var sndEffect:ALEffect = AL.createEffect();
+	#end
 
 	////
 	public var camGame:FlxCamera;
@@ -919,6 +925,7 @@ class PlayState extends MusicBeatState
 
 		// EVENT AND NOTE SCRIPTS WILL GET LOADED HERE
 		generateSong();
+		checkEventNote();
 
 		#if DISCORD_ALLOWED
 		// Discord RPC texts
@@ -1379,7 +1386,7 @@ class PlayState extends MusicBeatState
 		// Do the countdown.
 		curCountdown = new Countdown(this);
 		resetCountdown(curCountdown);
-		curCountdown.start(Conductor.crochet * 0.001); // time is optional but here we are
+		curCountdown.start(Conductor.beatLength); // time is optional but here we are
 
 		var i = this.members.indexOf(this.notes);
 		(i==-1) ? this.add(curCountdown) : this.insert(i, curCountdown);
@@ -1555,12 +1562,30 @@ class PlayState extends MusicBeatState
 		return playbackRate = pitch;
 	}
 
+	private function addTrack(trackName:String, ?sndAsset:FlxSoundAsset) {
+		if (sndAsset == null) sndAsset = {
+			if (song != null)
+				song.getTrackSound(trackName);
+			else
+				Paths.track(songId, trackName);
+		}
+		var newTrack = new FlxSound().loadEmbedded(sndAsset);
+		//newTrack.volume = 0.0;
+		newTrack.pitch = playbackRate;
+		newTrack.filter = sndFilter;
+		newTrack.effect = sndEffect;
+		newTrack.context = MUSIC;
+		newTrack.exists = true; // So it doesn't get recycled
+		FlxG.sound.list.add(newTrack);
+		
+		trackMap.set(trackName, newTrack);
+		tracks.push(newTrack);
+
+		return newTrack;
+	}
+
 	private function generateSong():Void
 	{
-		Conductor.changeBPM(PlayState.SONG.bpm);
-		Conductor.tracks = this.tracks;
-		Conductor.pitch = this.playbackRate;
-
 		////
 		songSpeedType = ClientPrefs.getGameplaySetting('scrolltype', songSpeedType);
 
@@ -1573,6 +1598,7 @@ class PlayState extends MusicBeatState
 		}
 
 		////
+		#if lime_openal
 		#if tgt if(ClientPrefs.ruin){
 			AL.effecti(sndEffect, AL.EFFECT_TYPE, AL.EFFECT_REVERB);
 			AL.effectf(sndEffect, AL.REVERB_DECAY_TIME, 5);
@@ -1582,34 +1608,19 @@ class PlayState extends MusicBeatState
 			AL.effecti(sndEffect, AL.EFFECT_TYPE, AL.EFFECT_NULL);
 			AL.filteri(sndFilter, AL.FILTER_TYPE, AL.FILTER_NULL);
 		}
+		#end
 
 		////
-		for (trackName in songTrackNames) {
-			var sndAsset = {
-				if (song != null)
-					song.getTrackSound(trackName);
-				else
-					Paths.track(songId, trackName);
-			}
-			var newTrack = new FlxSound().loadEmbedded(sndAsset);
-			//newTrack.volume = 0.0;
-			newTrack.pitch = playbackRate;
-			newTrack.filter = sndFilter;
-			newTrack.effect = sndEffect;
-			newTrack.context = MUSIC;
-			newTrack.exists = true; // So it doesn't get recycled
-			FlxG.sound.list.add(newTrack);
-			
-			trackMap.set(trackName, newTrack);
-			tracks.push(newTrack);
-		}
+		Conductor.changeBPM(PlayState.SONG.bpm);
+		Conductor.tracks = this.tracks;
+		Conductor.pitch = this.playbackRate;
 
-		inline function getTrackInstances(nameArray:Null<Array<String>>)
-			return nameArray==null ? [] : [for (name in nameArray) trackMap.get(name)];
+		inline function makeTrackInstances(nameArray:Array<String>):Array<FlxSound>
+			return nameArray==null ? [] : [for (name in nameArray) addTrack(name)];
 
-		instTracks = getTrackInstances(SONG.tracks.inst);
-		playerTracks = getTrackInstances(SONG.tracks.player);
-		opponentTracks = getTrackInstances(SONG.tracks.opponent);
+		instTracks = makeTrackInstances(SONG.tracks.inst);
+		playerTracks = makeTrackInstances(SONG.tracks.player);
+		opponentTracks = makeTrackInstances(SONG.tracks.opponent);
 
 		hitsound = new FlxSound().loadEmbedded(Paths.sound("hitsound"));
 		hitsound.exists = true;
@@ -1627,11 +1638,8 @@ class PlayState extends MusicBeatState
 			finishSong(false);
 		};
 		
-		//// NEW SHIT
-		var noteData:Array<SwagSection> = PlayState.SONG.notes;
-
-		// get note types to load
-		for (section in noteData) {
+		//// get note types to load
+		for (section in PlayState.SONG.notes) {
 			for (songNotes in section.sectionNotes) {
 				var type:String = songNotes[3];
 				if (noteTypeMap.exists(type))
@@ -1702,9 +1710,7 @@ class PlayState extends MusicBeatState
 			eventNotes.sort(sortByTime);
 
 		////
-		var prevTime = Sys.time();
-		generateNotes(noteData); // generates the chart
-		print('generateNotes() took ${Sys.time() - prevTime} seconds');
+		generateNotes(SONG.notes, true, true, SONG.keyCount); // generates the chart
 
 		allNotes.sort(sortByNotes);
 
@@ -1714,7 +1720,6 @@ class PlayState extends MusicBeatState
 		for (field in playfields.members)
 			field.clearStackedNotes();
 
-		checkEventNote();
 		generatedMusic = true;
 	}
 
@@ -3108,7 +3113,7 @@ class PlayState extends MusicBeatState
 					if (!spr.alive)
 						return;
 
-					var stepDur = (Conductor.stepCrochet * 0.001);
+					var stepDur = (Conductor.stepLength);
 					spr.tween = FlxTween.tween(spr.scale, {x: 0, y: 0}, stepDur, {
 						startDelay: stepDur * 8,
 						ease: FlxEase.quadIn,
@@ -3131,7 +3136,7 @@ class PlayState extends MusicBeatState
 				ease: FlxEase.backOut, 
 				onComplete: function(twn) {
 					spr.tween = FlxTween.tween(spr, {alpha: 0.0}, 0.2, {
-						startDelay: Conductor.crochet * 0.001,
+						startDelay: Conductor.beatLength,
 						onComplete: (_) -> spr.kill()
 					});
 				}
@@ -3198,7 +3203,7 @@ class PlayState extends MusicBeatState
 						if (!numSpr.alive)
 							return;
 	
-						var stepDur = (Conductor.stepCrochet * 0.001);
+						var stepDur = (Conductor.stepLength);
 						numSpr.tween = FlxTween.tween(numSpr, {alpha: 0.0}, stepDur, {
 							startDelay: Math.min((stepDur * 8) - 0.1, 0.0),
 							ease: FlxEase.quadIn,
@@ -3353,7 +3358,7 @@ class PlayState extends MusicBeatState
 			timingTxt.y -= 8;
 			timingTxt.scale.set(1, 1);
 			
-			var time = (Conductor.stepCrochet * 0.001);
+			var time = (Conductor.stepLength);
 			FlxTween.tween(timingTxt, 
 				{y: timingTxt.y + 8}, 
 				0.1,
