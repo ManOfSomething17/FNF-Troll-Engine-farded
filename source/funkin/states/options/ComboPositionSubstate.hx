@@ -132,6 +132,13 @@ class ComboPositionSubstate extends MusicBeatSubstate
 		makeText(4).text = "Timing Offset:";
 		txt_timing = makeText(5);
 
+		var funnyBullshit:FlxText = new FlxText(4, FlxG.height - 20, 0, "Press [F] to flip all X Offsets.", 16);
+		funnyBullshit.scrollFactor.set();
+		funnyBullshit.borderSize = 1;
+		funnyBullshit.setFormat(Paths.font("vcr.ttf"), 16, 0xFFFFFFFF, LEFT, FlxTextBorderStyle.OUTLINE, 0xFF000000);
+		funnyBullshit.cameras = cameras;
+		add(funnyBullshit);
+
 		updateJudgePos();
 		updateComboPos();
 		updateTimingPos();
@@ -307,6 +314,17 @@ class ComboPositionSubstate extends MusicBeatSubstate
 			ClientPrefs.comboOffset[3] = -80;
 			ClientPrefs.comboOffset[4] = 0;
 			ClientPrefs.comboOffset[5] = 0;
+			updateJudgePos();
+			updateComboPos();
+			updateTimingPos();
+		}
+
+		// quick flip!!
+		if(FlxG.keys.justPressed.F)
+		{
+			ClientPrefs.comboOffset[0] = -ClientPrefs.comboOffset[0];
+			ClientPrefs.comboOffset[2] = -ClientPrefs.comboOffset[2];
+			ClientPrefs.comboOffset[4] = -ClientPrefs.comboOffset[4];
 			updateJudgePos();
 			updateComboPos();
 			updateTimingPos();
