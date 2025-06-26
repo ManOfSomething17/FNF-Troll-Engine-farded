@@ -132,7 +132,7 @@ class ComboPositionSubstate extends MusicBeatSubstate
 		makeText(4).text = "Timing Offset:";
 		txt_timing = makeText(5);
 
-		var funnyBullshit:FlxText = new FlxText(4, FlxG.height - 20, 0, "Press [F] to flip all X Offsets.", 16);
+		var funnyBullshit:FlxText = new FlxText(4, FlxG.height - 20, 0, "Press [F] to flip all horizontal offsets.", 16);
 		funnyBullshit.scrollFactor.set();
 		funnyBullshit.borderSize = 1;
 		funnyBullshit.setFormat(Paths.font("vcr.ttf"), 16, 0xFFFFFFFF, LEFT, FlxTextBorderStyle.OUTLINE, 0xFF000000);
