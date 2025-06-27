@@ -208,36 +208,6 @@ class Song extends BaseSong
 	public function getCharts():Array<String>
 		return _charts ?? (_charts = _getCharts());
 
-	////
-
-	/** Return an array of strings related to the song's credits **/
-	public static function getMetadataInfo(metadata:SongMetadata):Array<String> {
-		var info:Array<String> = [];
-		
-		inline function pushInfo(str:String) {
-			for (string in str.split('\n'))
-				info.push(string);
-		}
-
-		if (metadata != null) {
-			if (metadata.artist != null && metadata.artist.length > 0)		
-				pushInfo("Artist: " + metadata.artist);
-
-			if (metadata.charter != null && metadata.charter.length > 0)
-				pushInfo("Chart: " + metadata.charter);
-
-			if (metadata.modcharter != null && metadata.modcharter.length > 0)
-				pushInfo("Modchart: " + metadata.modcharter);
-		}
-
-		if (metadata != null && metadata.extraInfo != null) {
-			for (extraInfo in metadata.extraInfo)
-				pushInfo(extraInfo);
-		}
-
-		return info;
-	}
-
 	#if USING_MOONCHART
 	public static var moonchartExtensions(get, null):Array<String> = [];
 	static function get_moonchartExtensions(){
@@ -345,6 +315,34 @@ class Song extends BaseSong
 		return a > b ? -1 : 1;
 	}
 
+	/** Return an array of strings related to the song's credits **/
+	public static function getMetadataInfo(metadata:SongMetadata):Array<String> {
+		var info:Array<String> = [];
+		
+		inline function pushInfo(str:String) {
+			for (string in str.split('\n'))
+				info.push(string);
+		}
+
+		if (metadata != null) {
+			if (metadata.artist != null && metadata.artist.length > 0)		
+				pushInfo("Artist: " + metadata.artist);
+
+			if (metadata.charter != null && metadata.charter.length > 0)
+				pushInfo("Chart: " + metadata.charter);
+
+			if (metadata.modcharter != null && metadata.modcharter.length > 0)
+				pushInfo("Modchart: " + metadata.modcharter);
+		}
+
+		if (metadata != null && metadata.extraInfo != null) {
+			for (extraInfo in metadata.extraInfo)
+				pushInfo(extraInfo);
+		}
+
+		return info;
+	}
+
 	private static function _parseSongJson(filePath:String, isChartJson:Bool = true):SwagSong {
 		var rawJson:Null<String> = Paths.getContent(filePath);
 		if (rawJson == null)
@@ -378,7 +376,7 @@ class Song extends BaseSong
 		return isChartJson ? onLoadJson(songJson) : onLoadEvents(songJson);
 	}
 
-	private static function parseSongJson(filePath:String, isChartJson:Bool = true):Null<SwagSong> {
+	public static function parseSongJson(filePath:String, isChartJson:Bool = true):Null<SwagSong> {
 		try {
 			return _parseSongJson(filePath, isChartJson);
 		}catch(e) {
@@ -505,13 +503,17 @@ class Song extends BaseSong
 				for (note in section.sectionNotes) {
 					var type:Dynamic = note[3];
 					
-					if (Std.isOfType(type, String)) {
+					if (Std.isOfType(type, String))
+					{
 						if (type == 'Hurt Note')
 							type = 'Mine';
-					}else if (type == true)
-						type = "Alt Animation";
+					}
 					else if (Std.isOfType(type, Int) && type > 0)
 						type = ChartingState.noteTypeList[type];
+					else if (type == true)
+						type = "Alt Animation";
+					else
+						type = '';
 						
 					note[3] = type;
 				}

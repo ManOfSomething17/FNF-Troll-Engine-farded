@@ -1534,8 +1534,13 @@ class PlayState extends MusicBeatState
 	{
 		var allEvents:Array<PsychEvent> = [];
 
-		var eventsJSON = Song.loadFromJson('events', songId, false);
-		if (eventsJSON != null) Song.getEventNotes(eventsJSON.events, allEvents);
+		if (song != null) {
+			var eventsJSON:SwagSong = Song.parseSongJson(song.getSongFile('events.json'), false);
+			if (eventsJSON != null) Song.getEventNotes(eventsJSON.events, allEvents);
+		}else {
+			var eventsJSON:SwagSong = Song.loadFromJson('events', songId, false);
+			if (eventsJSON != null) Song.getEventNotes(eventsJSON.events, allEvents);
+		}
 
 		Song.getEventNotes(SONG.events, allEvents);
 
@@ -1562,7 +1567,10 @@ class PlayState extends MusicBeatState
 		return playbackRate = pitch;
 	}
 
-	private function addTrack(trackName:String, ?sndAsset:FlxSoundAsset) {
+	private function addTrack(trackName:String, ?sndAsset:FlxSoundAsset):FlxSound {
+		if (trackMap.get(trackName) != null)
+			return trackMap.get(trackName);
+
 		if (sndAsset == null) sndAsset = {
 			if (song != null)
 				song.getTrackSound(trackName);
@@ -1738,17 +1746,17 @@ class PlayState extends MusicBeatState
 			for (songNotes in section.sectionNotes) {
 				var daStrumTime:Float = songNotes[0];
 				var daNoteData:Int = Std.int(songNotes[1]);
-				var gottaHitNote:Bool = section.mustHitSection ? (daNoteData < keyCount) : (daNoteData >= keyCount);
+				var mustPress:Bool = section.mustHitSection ? (daNoteData < keyCount) : (daNoteData >= keyCount);
+				var fieldIndex:Int = mustPress ? 0 : 1;
 
 				var daColumn:Int = daNoteData % keyCount;
 				var susLength = Math.round(songNotes[2] / Conductor.stepCrochet) - 1;
 				var prevNote:Note = (notes.length > 0) ? notes[notes.length - 1] : null;
 				var daType:String = songNotes[3];
 
-				var swagNote:Note = new Note(daStrumTime, daColumn, prevNote, gottaHitNote, songNotes[2] > 0 ? HEAD : TAP, false, hudSkin);
-				#if ALLOW_DEPRECATION
+				var swagNote:Note = new Note(daStrumTime, daColumn, prevNote, fieldIndex, songNotes[2] > 0 ? HEAD : TAP, false, hudSkin);
 				swagNote.realColumn = daNoteData;
-				#end
+				swagNote.mustPress = mustPress;
 				swagNote.sustainLength = songNotes[2] <= Conductor.stepCrotchet ? songNotes[2] : (susLength + 1) * Conductor.stepCrotchet; // +1 because hold end
 				swagNote.ID = notes.length;
 
@@ -1766,9 +1774,6 @@ class PlayState extends MusicBeatState
 				var playfield:PlayField = swagNote.field;
 
 				if (playfield == null && playfields.length > 0) {
-					if (swagNote.fieldIndex == -1)
-						swagNote.fieldIndex = swagNote.mustPress ? 0 : 1;
-
 					if (playfields[swagNote.fieldIndex] != null) {
 						playfield = playfields[swagNote.fieldIndex];
 						swagNote.field = playfield;
@@ -1792,10 +1797,9 @@ class PlayState extends MusicBeatState
 				prevNote = swagNote;
 				
 				inline function makeSustain(susNote:Int, susPart:SustainPart) {
-					var sustainNote:Note = new Note(daStrumTime + Conductor.stepCrochet * (susNote + 1), daColumn, prevNote, gottaHitNote, susPart, false, hudSkin);
-					#if ALLOW_DEPRECATION
+					var sustainNote:Note = new Note(daStrumTime + Conductor.stepCrochet * (susNote + 1), daColumn, prevNote, fieldIndex, susPart, false, hudSkin);
 					sustainNote.realColumn = daNoteData;
-					#end
+					swagNote.mustPress = mustPress;
 					sustainNote.ID = notes.length;
 					modchartObjects.set('note${sustainNote.ID}', sustainNote);
 
