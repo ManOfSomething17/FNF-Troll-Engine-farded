@@ -1,6 +1,8 @@
 package openfl.display;
 
+#if cpp
 import funkin.api.Memory;
+#end
 
 import flixel.util.FlxStringUtil;
 import flixel.FlxG;
@@ -14,9 +16,6 @@ import openfl.events.Event;
 import openfl.display._internal.stats.Context3DStats;
 import openfl.display._internal.stats.DrawCallContext;
 #end
-#if flash
-import openfl.Lib;
-#end
 
 /**
 	The FPS class provides an easy-to-use monitor to display
@@ -28,8 +27,6 @@ import openfl.Lib;
 #end
 class FPS extends TextField
 {
-	/**Allows the FPS counter to lie about your framerate because Lime sucks and framerates goes above whats desired**/
-	public var canLie:Bool = true;
 	/** The current frame rate, expressed using frames-per-second **/
 	public var currentFPS(default, null):Float = 0.0;
 	/** The current state class name **/
@@ -110,13 +107,6 @@ class FPS extends TextField
 		});
 		*/
 
-		#if flash
-		addEventListener(Event.ENTER_FRAME, function(e){
-			var time = Lib.getTimer();
-			__enterFrame(time - currentTime);
-		});
-		#end
-
 		FlxG.signals.gameResized.add(onGameResized);
 
 		#if (debug && false)
@@ -126,10 +116,24 @@ class FPS extends TextField
 		#end
 	}
 
+	private static inline function get_memoryUsageString():String
+	{
+		#if cpp
+		return FlxStringUtil.formatBytes(Memory.getCurrentRSS()) + " / " + FlxStringUtil.formatBytes(Memory.getPeakRSS());
+		#else
+		return Std.string(openfl.system.System.totalMemoryNumber);
+		#end
+	}
+	var lastTime:Float = 0;
+
 	// Event Handlers
 	@:noCompletion
-	private #if !flash override #end function __enterFrame(deltaTime:Float):Void
+	private override function __enterFrame(deltaTime:Float):Void
 	{
+		var nowTime = Main.getTime();
+		deltaTime = nowTime - lastTime;
+		lastTime = nowTime;
+
 		currentTime += deltaTime;
 		times.push(currentTime);
 
@@ -140,8 +144,6 @@ class FPS extends TextField
 
 		var currentCount = times.length;
 		currentFPS = Math.ffloor((currentCount + cacheCount) * 0.5);
-		if (currentFPS > FlxG.drawFramerate && canLie)
-			currentFPS = FlxG.drawFramerate;
 
 		if (currentCount != cacheCount)
 			cacheCount = currentCount;
@@ -149,7 +151,7 @@ class FPS extends TextField
 		text = 'FPS: $currentFPS';
 		
 		if (showMemory)
-			text += ' • MEM: ' + FlxStringUtil.formatBytes(Memory.getCurrentRSS()) + " / " + FlxStringUtil.formatBytes(Memory.getPeakRSS());
+			text += ' • MEM: ' + get_memoryUsageString();
 
 		#if (debug && false)
 		text += '\nState: $currentState';

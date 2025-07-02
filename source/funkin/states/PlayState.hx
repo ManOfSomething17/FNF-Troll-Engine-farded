@@ -5,6 +5,7 @@ import funkin.data.CharacterData;
 import funkin.data.Cache;
 import funkin.data.Song;
 import funkin.data.BaseSong;
+import funkin.data.ChartData;
 import funkin.objects.notes.Note;
 import funkin.objects.notes.NoteSplash;
 import funkin.objects.notes.StrumNote;
@@ -1365,34 +1366,35 @@ class PlayState extends MusicBeatState
 		callOnScripts('onModifierRegisterPost');
 		signals.onModifierRegisterPost.dispatch();
 
-		startedCountdown = true;
-		setOnScripts('startedCountdown', true);
-		callOnScripts('onCountdownStarted');
-		if (hudSkinScript != null)
-			hudSkinScript.call("onCountdownStarted");
-
 		callOnScripts("generateModchart"); // this is where scripts should generate modcharts from here on out lol
+
+		var skipCountdown:Bool = skipCountdown;
 
 		if (PlayState.startOnTime >= 500) {
 			trace('starting on time: $startOnTime');
 			startSong(PlayState.startOnTime, -500);
 			PlayState.startOnTime = 0;
-			return;
+			skipCountdown = true;
 		}
 		
-		if (skipCountdown)
-			return;
+		if (!skipCountdown) {
+			// Do the countdown.
+			curCountdown = new Countdown(this);
+			initCountdown(curCountdown);
+			curCountdown.start(Conductor.beatLength); // time is optional but here we are
 
-		// Do the countdown.
-		curCountdown = new Countdown(this);
-		resetCountdown(curCountdown);
-		curCountdown.start(Conductor.beatLength); // time is optional but here we are
+			var i = this.members.indexOf(this.notes);
+			(i==-1) ? this.add(curCountdown) : this.insert(i, curCountdown);
+		}
 
-		var i = this.members.indexOf(this.notes);
-		(i==-1) ? this.add(curCountdown) : this.insert(i, curCountdown);
+		startedCountdown = true;
+		setOnScripts('startedCountdown', true);
+		callOnScripts('onCountdownStarted');
+		if (hudSkinScript != null)
+			hudSkinScript.call("onCountdownStarted");
 	}
 
-	public function resetCountdown(countdown:Countdown):Void {
+	public function initCountdown(countdown:Countdown):Void {
 		if (countdown == null) return;
 		// I don't wanna break scripts so if you have a better way, do it
 		if (countdown.introAlts != introAlts) countdown.introAlts = introAlts;
@@ -1535,14 +1537,14 @@ class PlayState extends MusicBeatState
 		var allEvents:Array<PsychEvent> = [];
 
 		if (song != null) {
-			var eventsJSON:SwagSong = Song.parseSongJson(song.getSongFile('events.json'), false);
-			if (eventsJSON != null) Song.getEventNotes(eventsJSON.events, allEvents);
+			var eventsJSON:SwagSong = ChartData.parseSongJson(song.getSongFile('events.json'), false);
+			if (eventsJSON != null) ChartData.getEventNotes(eventsJSON.events, allEvents);
 		}else {
-			var eventsJSON:SwagSong = Song.loadFromJson('events', songId, false);
-			if (eventsJSON != null) Song.getEventNotes(eventsJSON.events, allEvents);
+			var eventsJSON:SwagSong = ChartData.loadFromJson('events', songId, false);
+			if (eventsJSON != null) ChartData.getEventNotes(eventsJSON.events, allEvents);
 		}
 
-		Song.getEventNotes(SONG.events, allEvents);
+		ChartData.getEventNotes(SONG.events, allEvents);
 
 		return allEvents;
 	}
@@ -1649,7 +1651,7 @@ class PlayState extends MusicBeatState
 		//// get note types to load
 		for (section in PlayState.SONG.notes) {
 			for (songNotes in section.sectionNotes) {
-				var type:String = songNotes[3];
+				var type:String = songNotes.noteType;
 				if (noteTypeMap.exists(type))
 					continue;
 
@@ -1744,20 +1746,20 @@ class PlayState extends MusicBeatState
 		
 		for (section in noteData) {
 			for (songNotes in section.sectionNotes) {
-				var daStrumTime:Float = songNotes[0];
-				var daNoteData:Int = Std.int(songNotes[1]);
+				var daStrumTime:Float = songNotes.strumTime;
+				var daNoteData:Int = songNotes.column;
 				var mustPress:Bool = section.mustHitSection ? (daNoteData < keyCount) : (daNoteData >= keyCount);
 				var fieldIndex:Int = mustPress ? 0 : 1;
 
 				var daColumn:Int = daNoteData % keyCount;
-				var susLength = Math.round(songNotes[2] / Conductor.stepCrochet) - 1;
+				var susLength = Math.round(songNotes.sustainLength / Conductor.stepCrochet) - 1;
 				var prevNote:Note = (notes.length > 0) ? notes[notes.length - 1] : null;
-				var daType:String = songNotes[3];
+				var daType:String = songNotes.noteType;
 
-				var swagNote:Note = new Note(daStrumTime, daColumn, prevNote, fieldIndex, songNotes[2] > 0 ? HEAD : TAP, false, hudSkin);
+				var swagNote:Note = new Note(daStrumTime, daColumn, prevNote, fieldIndex, songNotes.sustainLength > 0 ? HEAD : TAP, false, hudSkin);
 				swagNote.realColumn = daNoteData;
 				swagNote.mustPress = mustPress;
-				swagNote.sustainLength = songNotes[2] <= Conductor.stepCrotchet ? songNotes[2] : (susLength + 1) * Conductor.stepCrotchet; // +1 because hold end
+				swagNote.sustainLength = Math.max(0, songNotes.sustainLength <= Conductor.stepCrotchet ? songNotes.sustainLength : (susLength + 1) * Conductor.stepCrotchet); // +1 because hold end	
 				swagNote.ID = notes.length;
 
 				modchartObjects.set('note${swagNote.ID}', swagNote);
