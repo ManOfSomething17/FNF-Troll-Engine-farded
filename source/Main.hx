@@ -161,6 +161,10 @@ class Main extends Sprite
 		bread.visible = false;
 		addChild(bread);
 		#end
+
+		#if (windows && cpp)
+		funkin.api.Darkfriend.setDarkMode(!funkin.api.Darkfriend.isLightTheme());
+		#end
 	}
 
 	public static function getTime():Float {

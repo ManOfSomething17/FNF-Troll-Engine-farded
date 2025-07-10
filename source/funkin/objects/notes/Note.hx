@@ -315,19 +315,30 @@ class Note extends NoteObject
 			genScript = PlayState.instance.getHudSkinScript(value);
 
 		////
-		if (genScript == null){
-			texture = "";
+		var loaded:Bool;
+
+		if (genScript == null) {
+			loaded = false;
 
 		}else if (genScript.exists("setupNoteTexture")) {
 			genScript.executeFunc("setupNoteTexture", [this]);
+			loaded = true;
 
 		}else {
-			if (genScript.exists("textureSuffix"))
+			if (genScript.exists("textureSuffix")) {
 				texSuffix = genScript.get("textureSuffix");
-
-			if (genScript.exists("noteTexture"))
+			}
+			
+			if (genScript.exists("noteTexture")) {
 				texture = genScript.get("noteTexture");
+				loaded =  true;
+			}else {
+				loaded = false;
+			}
 		}
+		
+		if (!loaded)
+			texture = "";
 
 		return noteMod = value;
 	}

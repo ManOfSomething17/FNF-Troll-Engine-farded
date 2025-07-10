@@ -3089,6 +3089,44 @@ class PlayState extends MusicBeatState
 		eventNotes = [];
 	}
 
+	private function displayTiming(hitDiff:Float, judgeData:JudgmentData) {		
+		FlxTween.cancelTweensOf(timingTxt);
+		FlxTween.cancelTweensOf(timingTxt.scale);
+		
+		timingTxt.text = '${FlxMath.roundDecimal(hitDiff, 2)}ms';
+		timingTxt.screenCenter();
+		timingTxt.x += ClientPrefs.comboOffset[4];
+		timingTxt.y -= ClientPrefs.comboOffset[5];
+
+		timingTxt.color = hud.judgeColours.get(judgeData.internalName) ?? 0xFF477947;
+
+		timingTxt.visible = true;
+		timingTxt.alpha = ClientPrefs.judgeOpacity;
+		timingTxt.y -= 8;
+		timingTxt.scale.set(1, 1);
+		
+		var time = (Conductor.stepLength);
+		FlxTween.tween(timingTxt, 
+			{y: timingTxt.y + 8}, 
+			0.1,
+			{onComplete: function(_){
+				if (ClientPrefs.simpleJudge){
+					FlxTween.tween(timingTxt.scale, {x: 0, y: 0}, time, {
+						ease: FlxEase.quadIn,
+						onComplete: (_) -> timingTxt.visible = false,
+						startDelay: time * 8
+					});
+				}else{
+					FlxTween.tween(timingTxt, {alpha: 0}, time, {
+						// ease: FlxEase.circOut,
+						onComplete: (_) -> timingTxt.visible = false,
+						startDelay: time * 8
+					});
+				}
+			}}
+		);
+	}
+
 	private function displayJudgment(image:String){
 		var r:Bool = false;
 		if(hudSkinScript!=null && callScript(hudSkinScript, "onDisplayJudgment", [image]) == Globals.Function_Stop)
@@ -3242,12 +3280,12 @@ class PlayState extends MusicBeatState
 		callOnScripts("onDisplayComboPost", [combo]);
 	}
 
-	private function applyJudgmentData(judgeData:JudgmentData, diff:Float, ?bot:Bool = false, ?show:Bool = true){
+	private function applyJudgmentData(judgeData:JudgmentData, diff:Float, ?bot:Bool = false){
 		if(judgeData==null){
 			trace("You didnt give a valid JudgmentData to applyJudgmentData!");
 			return;
 		}
-		if(callOnScripts("onApplyJudgmentData", [judgeData, diff, bot, show]) == Globals.Function_Stop)
+		if(callOnScripts("onApplyJudgmentData", [judgeData, diff, bot]) == Globals.Function_Stop)
 			return;
 
 		stats.score += Math.floor(judgeData.score * playbackRate);
@@ -3276,27 +3314,37 @@ class PlayState extends MusicBeatState
 		
 		RecalculateRating();
 
-		if (ClientPrefs.coloredCombos)
-		{
-			if (stats.judgements.get("bad") > 0 || stats.judgements.get("shit") > 0 || stats.comboBreaks > 0)
-				comboColor = 0xFFFFFFFF;
-			else if (stats.judgements.get("good") > 0)
-				comboColor = hud.judgeColours.get("good");
-			else if (stats.judgements.get("sick") > 0)
-				comboColor = hud.judgeColours.get("sick");
-			else if (stats.judgements.get("epic") > 0)
-				comboColor = hud.judgeColours.get("epic");
-		}
+		if(hudSkinScript!=null)callScript(hudSkinScript, "onApplyJudgmentDataPost", [judgeData, diff, bot]);
+		callOnScripts("onApplyJudgmentDataPost", [judgeData, diff, bot]);
+	}
 
-		if(hudSkinScript!=null)callScript(hudSkinScript, "onApplyJudgmentDataPost", [judgeData, diff, bot, show]);
-		callOnScripts("onApplyJudgmentDataPost", [judgeData, diff, bot, show]);
+	private function updateComboColor()
+		comboColor = ClientPrefs.coloredCombos ? getComboColor() : 0xFFFFFFFF;
 
-		if(show){
-			if(judgeData.hideJudge!=true)
-				displayJudgment(judgeData.internalName);
-			if(judgeData.comboBehaviour != IGNORE)
-				displayCombo(judgeData.comboBehaviour == BREAK ? (stats.cbCombo > 1 ? -stats.cbCombo : 0) : stats.combo);
-		}
+	private function getComboColor() {
+		if (stats.judgements.get("bad") > 0 || stats.judgements.get("shit") > 0 || stats.comboBreaks > 0)
+			return 0xFFFFFFFF;
+		else if (stats.judgements.get("good") > 0)
+			return hud.judgeColours.get("good");
+		else if (stats.judgements.get("sick") > 0)
+			return hud.judgeColours.get("sick");
+		else if (stats.judgements.get("epic") > 0)
+			return hud.judgeColours.get("epic");
+		else
+			return 0xFFFFFFFF;
+	}
+
+	private function _noteJudged(judgeData:JudgmentData, note:Note, field:PlayField) {
+		updateComboColor();
+
+		if (ClientPrefs.showMS && !field.autoPlayed)
+			displayTiming(note.hitResult.hitDiff + ClientPrefs.ratingOffset, judgeData);
+
+		if (judgeData.hideJudge!=true)
+			displayJudgment(judgeData.internalName);
+		
+		if (judgeData.comboBehaviour != IGNORE)
+			displayCombo(judgeData.comboBehaviour == BREAK ? (stats.cbCombo > 1 ? -stats.cbCombo : 0) : stats.combo);
 	}
 
 	private function applyNoteJudgment(note:Note, bot:Bool = false):Null<JudgmentData>
@@ -3318,14 +3366,14 @@ class PlayState extends MusicBeatState
 		if (ret != null && ret != Globals.Function_Continue)
 			mutatedJudgeData = cast ret; // so you can return your own custom judgements or w/e
 
-		applyJudgmentData(mutatedJudgeData, note.hitResult.hitDiff, bot, true);
+		applyJudgmentData(mutatedJudgeData, note.hitResult.hitDiff);
 
 		callOnHScripts("onApplyNoteJudgmentPost", [note, mutatedJudgeData, bot]);
 		
 		return mutatedJudgeData;
 	}
 
-	private function applyJudgment(judge:Judgment, ?diff:Float = 0, ?show:Bool = true)
+	private function applyJudgment(judge:Judgment, ?diff:Float = 0)
 		applyJudgmentData(judgeManager.judgmentData.get(judge), diff);
 
 	private function judge(note:Note, field:PlayField=null) {
@@ -3340,53 +3388,14 @@ class PlayState extends MusicBeatState
 		if (note.noteSplashBehaviour == FORCED || judgeData.noteSplash && !note.noteSplashDisabled)
 			spawnNoteSplashOnNote(note, field);
 
-		var hitDiff = note.hitResult.hitDiff + ClientPrefs.ratingOffset;
 		stats.judged.push({
 			strumTime: note.strumTime, 
 			judgment: note.hitResult.judgment, 
-			hitDiff: hitDiff
+			hitDiff: note.hitResult.hitDiff + ClientPrefs.ratingOffset,
 		});
 
-		if (ClientPrefs.showMS && (field==null || !field.autoPlayed))
-		{
-			FlxTween.cancelTweensOf(timingTxt);
-			FlxTween.cancelTweensOf(timingTxt.scale);
-			
-			timingTxt.text = '${FlxMath.roundDecimal(hitDiff, 2)}ms';
-			timingTxt.screenCenter();
-			timingTxt.x += ClientPrefs.comboOffset[4];
-			timingTxt.y -= ClientPrefs.comboOffset[5];
-
-			timingTxt.color = hud.judgeColours.get(judgeData.internalName) ?? 0xFF477947;
-
-			timingTxt.visible = true;
-			timingTxt.alpha = ClientPrefs.judgeOpacity;
-			timingTxt.y -= 8;
-			timingTxt.scale.set(1, 1);
-			
-			var time = (Conductor.stepLength);
-			FlxTween.tween(timingTxt, 
-				{y: timingTxt.y + 8}, 
-				0.1,
-				{onComplete: function(_){
-					if (ClientPrefs.simpleJudge){
-						FlxTween.tween(timingTxt.scale, {x: 0, y: 0}, time, {
-							ease: FlxEase.quadIn,
-							onComplete: function(_){timingTxt.visible = false;},
-							startDelay: time * 8
-						});
-					}else{
-						FlxTween.tween(timingTxt, {alpha: 0}, time, {
-							// ease: FlxEase.circOut,
-							onComplete: function(_){timingTxt.visible = false;},
-							startDelay: time * 8
-						});
-					}
-				}}
-			);
-		}
-
-		hud.noteJudged(judgeData, note, field);
+		if (!hud.noteJudged(judgeData, note, field))
+			_noteJudged(judgeData, note, field);
 	}
 
 	public var strumsBlocked:Array<Bool> = [];
