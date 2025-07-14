@@ -673,7 +673,7 @@ class PlayState extends MusicBeatState
 		Note.defaultNoteAnimNames = ['purple0', 'blue0', 'green0', 'red0'];
 		Note.defaultHoldAnimNames = ['purple hold piece', 'blue hold piece', 'green hold piece', 'red hold piece'];
 		Note.defaultTailAnimNames = ['purple hold end', 'blue hold end', 'green hold end', 'red hold end'];
-		Note.spriteScale = (4 / keyCount) * 0.7;
+		Note.spriteScale = (4 / (keyCount < 4 ? 4 : keyCount)) * 0.7;
 		Note.swagWidth = Note.spriteScale * 160;
 		/**
 		 * Note texture asset names
@@ -4267,11 +4267,11 @@ class PlayStateSignals /*extends MusicBeatSignals*/
 	public var onBeatHit = new FlxTypedSignal<Int -> Void>();
 	public var onStepHit = new FlxTypedSignal<Int -> Void>();
 
-	public var goodNoteHit = new FlxTypedSignal<(Note, NoteField) -> Void>();
-	public var opponentNoteHit = new FlxTypedSignal<(Note, NoteField) -> Void>();
+	public var goodNoteHit = new FlxTypedSignal<(Note, PlayField) -> Void>();
+	public var opponentNoteHit = new FlxTypedSignal<(Note, PlayField) -> Void>();
 	
-	public var noteMiss = new FlxTypedSignal<(Note, NoteField) -> Void>();
-	public var noteMissPress = new FlxTypedSignal<(Note, NoteField) -> Void>();
+	public var noteMiss = new FlxTypedSignal<(Note, PlayField) -> Void>();
+	public var noteMissPress = new FlxTypedSignal<(Note, PlayField) -> Void>();
 
 	public var onPause = new FlxTypedSignal<Void -> Void>();
 	public var onResume = new FlxTypedSignal<Void -> Void>();
