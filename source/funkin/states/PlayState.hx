@@ -2569,8 +2569,8 @@ class PlayState extends MusicBeatState
 		persistentUpdate = false;
 		pause();
 
-		if (FlxG.keys.pressed.SHIFT) ChartingState.curSec = curSection;
-		MusicBeatState.switchState(new ChartingState());
+		var state = new ChartingState(SONG, FlxG.keys.pressed.SHIFT ? curSection : 0);
+		MusicBeatState.switchState(state);
 	}
 
 	public var isDead:Bool = false;
@@ -3173,7 +3173,7 @@ class PlayState extends MusicBeatState
 		else {
 			spr.moves = true;
 			spr.acceleration.y = 550;
-			spr.velocity.set(FlxG.random.int(-10, 10), -FlxG.random.int(140, 175));
+			spr.velocity.y = -FlxG.random.int(140, 175);
 
 			spr.scale.copyFrom(ratingGroup.judgeTemplate.scale);
 			spr.tween = FlxTween.tween(spr.scale, {x: spr.scale.x, y: spr.scale.y}, 0.1, {
@@ -3264,7 +3264,7 @@ class PlayState extends MusicBeatState
 			{
 				numSpr.moves = true;
 				numSpr.acceleration.y = FlxG.random.int(200, 300);
-				numSpr.velocity.set(FlxG.random.float(-5, 5), -FlxG.random.int(140, 160));
+				numSpr.velocity.y = -FlxG.random.int(140, 160);
 
 				numSpr.scale.copyFrom(ratingGroup.comboTemplate.scale);
 				numSpr.updateHitbox();
@@ -3881,7 +3881,7 @@ class PlayState extends MusicBeatState
 	public function createHScript(path:String, ?scriptName:String, ?ignoreCreateCall:Bool = false):FunkinHScript
 	{
 		var split = path.split("/");
-		var modName:String = split[0] == "content" ? split[1] : 'assets';
+		var modName:String = split[0] == Paths.contentFolderName ? split[1] : 'assets';
 		var script = FunkinHScript.fromFile(path, scriptName, [
 			"modName" => modName
 		], ignoreCreateCall != true);

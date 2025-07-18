@@ -168,9 +168,8 @@ class ChartingState extends MusicBeatState
 
 	var UI_box:FlxUITabMenu;
 
-	public static var curSec:Int = 0;
+	public static var lastSong:String = '';
 	public static var lastSection:Int = 0;
-	private static var lastSong:String = '';
 
 	var bpmTxt:FlxText;
 
@@ -179,6 +178,7 @@ class ChartingState extends MusicBeatState
 	var quant:AttachedSprite;
 	var strumLineNotes:FlxTypedGroup<StrumNote>;
 	var curSong:String = 'Test';
+	var curSec:Int = 0;
 	var amountSteps:Int = 0;
 
 	var highlight:FlxSprite;
@@ -385,6 +385,12 @@ class ChartingState extends MusicBeatState
 		// Updating Discord Rich Presence
 		DiscordClient.changePresence("Chart Editor", _song.metadata.songName);
 		#end
+	}
+
+	public function new(data:SwagSong = null, section:Int = -1) {
+		super();
+		this._song = data;
+		this.curSec = (section >= 0) ? section : (lastSong == songId ? lastSection : 0);
 	}
 
 	override function create()
@@ -599,11 +605,6 @@ class ChartingState extends MusicBeatState
 		quantTxt.borderSize = 2;
 		quantTxt.scrollFactor.set();
 		add(quantTxt);
-
-		if (lastSong != songId) {
-			lastSong = songId;
-			curSec = 0;
-		}
 
 		changeSection(curSec);
 
@@ -1786,9 +1787,16 @@ class ChartingState extends MusicBeatState
 
 		//// get last accessible section within the song's length
 		songLengthSections = 0;
-		while (sectionStartTime(songLengthSections) < songLength)
-			songLengthSections++;
-		songLengthSections++;
+		while (true) {
+			var ss = sectionStartTime(songLengthSections);
+			if (ss < songLength) {
+				songLengthSections++;
+			}else {
+				trace(ss);
+				songLengthSections++;
+				break;
+			}
+		}
 		trace(songLengthSections);
 	}
 
@@ -1854,7 +1862,7 @@ class ChartingState extends MusicBeatState
 				
 				case 'note_susLength':
 					if(curSelectedNote != null) {
-						setNoteSustain(nums.value, curSelectedNote);
+						new ChangeSustainAction(curSelectedNote, nums.value, true);
 					} else {
 						sender.value = 0;
 					}
@@ -2221,9 +2229,9 @@ class ChartingState extends MusicBeatState
 
 		if (curSelectedNote != null) {
 			if (FlxG.keys.justPressed.E)
-				changeNoteSustain(Conductor.stepCrochet);
+				new ChangeSustainAction(curSelectedNote, Conductor.stepCrochet, false);
 			if (FlxG.keys.justPressed.Q)
-				changeNoteSustain(-Conductor.stepCrochet);
+				new ChangeSustainAction(curSelectedNote, -Conductor.stepCrochet, false);
 		}
 
 		if (FlxG.keys.pressed.CONTROL) {
@@ -2232,6 +2240,9 @@ class ChartingState extends MusicBeatState
 			}
 			if (FlxG.keys.justPressed.Y) {
 				redo();
+			}
+			if (FlxG.keys.justPressed.S) {
+				saveLevel();
 			}
 		}
 
@@ -2697,25 +2708,6 @@ class ChartingState extends MusicBeatState
 		#end
 	}
 
-	function setNoteSustain(value:Float, ?note:NoteData):Void
-	{
-		if (note == null)
-			note = curSelectedNote;
-
-		if (note != null) {
-			new ChangeSustainAction(note, value, true);
-		}
-	}
-
-	function changeNoteSustain(value:Float, ?note:NoteData):Void
-	{
-		if (note == null)
-			note = curSelectedNote;
-
-		if (note != null)
-			new ChangeSustainAction(note, value, false);
-	}
-
 	function changeSection(sec:Int = 0, ?updateMusic:Bool = true):Void
 	{
 		if (_song.notes[sec] != null) {
@@ -2777,6 +2769,12 @@ class ChartingState extends MusicBeatState
 
 	function updateNoteSteps():Void
 	{
+		if (curSelectedNote == null) {
+			labelSusLength.text = '';
+			labelStrumTime.text = '';
+			return;
+		}
+
 		var strumStep:Float = Conductor.getStep(curSelectedNote.strumTime);
 		var sustainSteps:Float = 0;
 
@@ -3101,6 +3099,7 @@ class ChartingState extends MusicBeatState
 	{		
 		if (note.column > -1) {
 			curSelectedNote = note.chartData;
+			currentNoteType = note.noteType;
 			updateNoteUI();
 		}else {
 			curSelectedEvent = note.chartData;
@@ -3360,6 +3359,12 @@ class ChartingState extends MusicBeatState
 		if(_song.notes[section] != null) val = _song.notes[section].sectionBeats;
 		return val != null ? val : 4;
 	}
+
+	override function destroy() {
+		ChartingState.lastSong = songId;
+		ChartingState.lastSection = curSec;
+		super.destroy();
+	}
 }
 
 /** dont sort my shit **/
@@ -3530,9 +3535,6 @@ private abstract class NoteAction extends ChartingAction {
 
 private abstract class ChartingAction
 {
-	/** Whether undoing this action should also undo the action previous to it **/
-	public var stealth:Bool = false;
-
 	/** Apply the effects of this action **/
 	abstract public function redo():Void;
 
