@@ -60,8 +60,12 @@ class FreeplayState extends MusicBeatState
 		{
 			var songIdList:Array<String> = [];
 
-			inline function sowy(song:String) {
-				var songId:String = Paths.formatToSongPath(song);
+			inline function sowy(songId:String) {
+				// weird old tgt shit
+				var splitted:Array<String> = songId.split(":");
+				if (splitted.length > 1)
+					songId = splitted[0];
+				
 				if (!songIdList.contains(songId))
 					songIdList.push(songId);
 			}
@@ -432,8 +436,10 @@ class FreeplayState extends MusicBeatState
 
 	override public function destroy()
 	{
-		lastSelectedIdx = menu.curSelected;
-		lastSelectedChart = curChartId;
+		if (menu != null) {
+			lastSelectedIdx = menu.curSelected;
+			lastSelectedChart = curChartId;
+		}
 		
 		super.destroy();
 	}
