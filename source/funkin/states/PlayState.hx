@@ -66,13 +66,7 @@ using funkin.CoolerStringTools;
 import funkin.api.Discord.DiscordClient;
 #end
 
-#if (!VIDEOS_ALLOWED) typedef VideoHandler = Dynamic;
-#elseif (hxCodec >= "3.0.0") import hxcodec.flixel.FlxVideo as VideoHandler;
-#elseif (hxCodec >= "2.6.1") import hxcodec.VideoHandler as VideoHandler;
-#elseif (hxCodec == "2.6.0") import VideoHandler;
-#elseif (hxCodec) import vlc.MP4Handler as VideoHandler; 
-#elseif (hxvlc) import hxvlc.flixel.FlxVideo as VideoHandler;
-#end
+import funkin.states.VideoPlayerState.VideoHandler;
 
 enum abstract CharacterType(Int) from Int to Int {
 	var BF = 0;
@@ -938,7 +932,7 @@ class PlayState extends MusicBeatState
 		// Discord RPC texts
 		stateText = '${displayedSong} [$displayedDifficulty]';
 		
-		detailsText = isStoryMode ? "Story Mode" : "Freeplay";
+		detailsText = chartingMode ? "Charting Mode" : isStoryMode ? "Story Mode" : "Freeplay";
 		detailsPausedText = "Paused - " + detailsText;
 
 		updateSongDiscordPresence();
@@ -952,10 +946,10 @@ class PlayState extends MusicBeatState
 			callOnAllScripts('onCreatePost');
 
 		add(ratingGroup);
-		add(timingTxt);
 		add(playfields);
 		add(notefields);
 		add(grpNoteSplashes);
+		add(timingTxt);
 
 		luaDebugGroup.cameras = [camOther];
 		add(luaDebugGroup);
