@@ -114,6 +114,8 @@ class SpeedEvent
 @:noScripting
 class PlayState extends MusicBeatState
 {
+	public var disableCameraMovement:Bool = false;
+
 	public static function loadPlaylist(playlist:Array<BaseSong>, chartId:String) {
 		PlayState.loadSong(playlist[0], chartId);
 		PlayState.songPlaylist = playlist;
@@ -258,6 +260,13 @@ class PlayState extends MusicBeatState
 	public var camZoomingMult:Float = 1.0;
 	public var camZoomingDecay:Float = 1.0;
 
+	/**
+		Every how many beats should the camera bump.  
+		Setting this to -1 will make it zoom on section hit.
+	**/
+	public var zoomEveryBeat:Int = -1;
+	public var beatToZoom:Int = 0;
+
 	public var cameraSpeed:Float = 1.0;
 	public var defaultCamZoom:Float = 1.0;
 	public var defaultHudZoom:Float = 1.0;
@@ -329,6 +338,8 @@ class PlayState extends MusicBeatState
 	
 	public var ratingGroup:RatingGroup;
 	public var timingTxt:FlxText;
+	
+	public var fish:Fish;
 
 	/** debugPrint text container **/
 	#if(HSCRIPT_ALLOWED)
@@ -349,10 +360,16 @@ class PlayState extends MusicBeatState
 	#end
 
 	////
-	private var generatedMusic:Bool = false;
-	public var startingSong:Bool = false;
+	public var generatedMusic:Bool = false;
+	public var startedSong:Bool = false;
+	public var startedCountdown:Bool = false;
 	public var inCutscene:Bool = false;
+	public var isDead:Bool = false;
+	public var paused:Bool = false;
 	public var endingSong:Bool = false;
+
+	public var canReset:Bool = true;
+	public var canPause:Bool = true;
 
 	public var songHits:Int = 0;
 	public var songMisses:Int = 0;
@@ -508,8 +525,6 @@ class PlayState extends MusicBeatState
 	
 	public var offset:Float = 0;
 
-	public var fish:Fish;
-
 	override public function create()
 	{
 		print('\nCreating PlayState\n');
@@ -522,6 +537,8 @@ class PlayState extends MusicBeatState
 		Wife3.timeScale = Wife3.judgeScales.get(ClientPrefs.judgeDiff);
 		PBot.missThreshold = Math.max(160, ClientPrefs.hitWindow);
 
+		Paths.getAllStrings();
+		
 		ratingStuff = Highscore.grades.get(ClientPrefs.gradeSet);
 		stats = new Stats(ClientPrefs.accuracyCalc, ratingStuff);
 		stats.useFlags = ClientPrefs.gradeSet == 'Etterna';
@@ -643,7 +660,7 @@ class PlayState extends MusicBeatState
 		offset = SONG.offset ?? 0.0;
 		Conductor.mapBPMChanges(SONG);
 		Conductor.changeBPM(SONG.bpm);
-		Conductor.songPosition = Conductor.crochet * -5;
+		Conductor.songPosition = PlayState.startOnTime - Conductor.crochet * 5;
 		Conductor.updateSteps();
 
 		metadata = SONG.metadata ??= (song?.getMetadata(difficultyName));
@@ -804,7 +821,6 @@ class PlayState extends MusicBeatState
 			});
 		}
 
-		Paths.getAllStrings();
 		Cache.loadWithList(shitToLoad);
 		shitToLoad = [];
 
@@ -817,7 +833,7 @@ class PlayState extends MusicBeatState
 		grpNoteSplashes.add(splash);
 
 		////
-		displayedDifficulty = Paths._getString('difficultyName_$difficultyName') ?? difficultyName.replace("-"," ").capitalize();
+		displayedDifficulty = Paths.getString('difficultyName_$difficultyName') ?? difficultyName.replace("-"," ").capitalize();
 		displayedSong = metadata?.songName ?? songId.replace("-"," ").capitalize();
 
 		if (hud == null) {
@@ -922,11 +938,10 @@ class PlayState extends MusicBeatState
 		health = 1.0;
 		reloadHealthBarColors();
 
-		startingSong = true;
-
-		// EVENT AND NOTE SCRIPTS WILL GET LOADED HERE
-		generateSong();
+		modifierRegister();
+		generateSong(); // EVENT AND NOTE SCRIPTS WILL GET LOADED HERE
 		checkEventNote();
+		clearNotesBefore(PlayState.startOnTime);
 
 		#if DISCORD_ALLOWED
 		// Discord RPC texts
@@ -1030,7 +1045,6 @@ class PlayState extends MusicBeatState
 		super.create();
 
 		RecalculateRating();
-		startCountdown();
 
 		if(!legacyOnCreatePost) // Just incase shit breaks???
 			callOnAllScripts('onCreatePost');
@@ -1310,28 +1324,8 @@ class PlayState extends MusicBeatState
 	}
 	*/
 
-	public function startCountdown():Void
+	public function modifierRegister():Void
 	{
-		if(startedCountdown) {
-			callOnScripts('onStartCountdown');
-			callScript(hudSkinScript, "onStartCountdown");
-			return;
-		}
-
-		inCutscene = false;
-
-		if (hudSkinScript != null) {
-			if (callScript(hudSkinScript, "onStartCountdown") == Globals.Function_Stop)
-				return;
-		}
-
-		if (callOnScripts('onStartCountdown') == Globals.Function_Stop) {
-			return;
-		}
-
-		if (skipCountdown || startOnTime > 0)
-			skipArrowStartTween = true;
-
 		generateStrums();
 
 		#if ALLOW_DEPRECATION
@@ -1367,17 +1361,30 @@ class PlayState extends MusicBeatState
 		signals.onModifierRegisterPost.dispatch();
 
 		callOnScripts("generateModchart"); // this is where scripts should generate modcharts from here on out lol
+	}
 
-		var skipCountdown:Bool = skipCountdown;
-
-		if (PlayState.startOnTime >= 500) {
-			trace('starting on time: $startOnTime');
-			startSong(PlayState.startOnTime, -500);
-			PlayState.startOnTime = 0;
-			skipCountdown = true;
+	public function startCountdown():Void
+	{
+		if(startedCountdown) {
+			callOnScripts('onStartCountdown');
+			callScript(hudSkinScript, "onStartCountdown");
+			return;
 		}
-		
-		if (!skipCountdown) {
+
+		seenCutscene = true;
+		inCutscene = false;
+
+		if (hudSkinScript != null) {
+			if (callScript(hudSkinScript, "onStartCountdown") == Globals.Function_Stop)
+				return;
+		}
+
+		if (callOnScripts('onStartCountdown') == Globals.Function_Stop)
+			return;
+
+		if (skipCountdown) {
+			skipArrowStartTween = true;
+		}else {
 			// Do the countdown.
 			curCountdown = new Countdown(this);
 			initCountdown(curCountdown);
@@ -1385,13 +1392,16 @@ class PlayState extends MusicBeatState
 
 			var i = this.members.indexOf(this.notes);
 			(i==-1) ? this.add(curCountdown) : this.insert(i, curCountdown);
+
+			setOnScripts('startedCountdown', true);
+			callOnScripts('onCountdownStarted');
+			if (hudSkinScript != null)
+				hudSkinScript.call("onCountdownStarted");
 		}
 
 		startedCountdown = true;
-		setOnScripts('startedCountdown', true);
-		callOnScripts('onCountdownStarted');
-		if (hudSkinScript != null)
-			hudSkinScript.call("onCountdownStarted");
+		for (field in playfields.members)
+			field.fadeIn(skipArrowStartTween);
 	}
 
 	public function initCountdown(countdown:Countdown):Void {
@@ -1454,8 +1464,6 @@ class PlayState extends MusicBeatState
 
 	public function clearNotesBefore(time:Float)
 	{
-		var time = time + 350;
-
 		var i:Int = allNotes.length - 1;
 		while (i >= 0) {
 			var daNote:Note = allNotes[i];
@@ -1484,19 +1492,11 @@ class PlayState extends MusicBeatState
 		Conductor.startSong(time);
 	}
 
-	function startSong(startOnTime:Float=0, offset:Float = 0):Void
+	function startSong(startOnTime:Float=0):Void
 	{
-		startingSong = false;
-
-		var realStartTime = startOnTime + offset;
-		if (realStartTime > 0) {
-			startedOnTime = startOnTime;
-			clearNotesBefore(startOnTime);
-		}else {
-			realStartTime = 0;
-		}
-
-		Conductor.startSong(realStartTime);
+		startedSong = true;		
+		startedOnTime = startOnTime;
+		Conductor.startSong(startOnTime);
 		updateSongDiscordPresence();
 
 		// Song duration in a float, useful for the time left feature
@@ -2151,9 +2151,6 @@ class PlayState extends MusicBeatState
 		callOnScripts('postReceptorGeneration'); // deprecated
 		#end
 		callOnScripts('onReceptorGenerationPost');
-
-		for(field in playfields.members)
-			field.fadeIn(skipArrowStartTween);
 	}
 
 	override function openSubState(SubState:FlxSubState)
@@ -2202,11 +2199,10 @@ class PlayState extends MusicBeatState
 
 	override public function onFocusLost():Void
 	{
-		if (ClientPrefs.autoPause && !paused && startedCountdown && canPause) {
-			openPauseMenu();
-		}
-
 		super.onFocusLost();
+
+		if (ClientPrefs.autoPause && !paused && canPause)
+			openPauseMenu();
 	}
 
 	////
@@ -2345,12 +2341,6 @@ class PlayState extends MusicBeatState
 		updateSongDiscordPresence();
 	}
 
-	public var paused:Bool = false;
-	public var canReset:Bool = true;
-	var startedCountdown:Bool = false;
-	var canPause:Bool = true;
-	var prevNoteCount:Int = 0;
-
 	private var svIndex:Int =0;
 	private inline function updateVisualPosition() {
 		var event:SpeedEvent = null;
@@ -2375,6 +2365,7 @@ class PlayState extends MusicBeatState
 		setOnScripts('curDecBeat', curDecBeat);
 	}
 
+	var goodTicks:Int = 0;
 	override public function update(elapsed:Float)
 	{
 		if (paused){
@@ -2407,7 +2398,7 @@ class PlayState extends MusicBeatState
 		if (hudSkinScript != null)
 			hudSkinScript.call("onUpdate", [elapsed]);
 
-		if (!inCutscene) {
+		if (!disableCameraMovement) {
 			var xOff:Float = 0;
 			var yOff:Float = 0;
 
@@ -2416,19 +2407,26 @@ class PlayState extends MusicBeatState
 				yOff = focusedChar.camOffY;
 			}
 
-			var currentCameraPoint = cameraPoints[cameraPoints.length-1];
-			if (currentCameraPoint != null)
-				camFollow.copyFrom(currentCameraPoint);
+			if(!inCutscene){
+				var currentCameraPoint = cameraPoints[cameraPoints.length-1];
+				if (currentCameraPoint != null)
+					camFollow.copyFrom(currentCameraPoint);
+			}
 
 			var lerpVal:Float = Math.exp(-elapsed * 2.4 * cameraSpeed);
 			camFollowPos.setPosition(
 				FlxMath.lerp(camFollow.x + xOff, camFollowPos.x, lerpVal),
 				FlxMath.lerp(camFollow.y + yOff, camFollowPos.y, lerpVal)
 			);
+		}
 
-			if (!startingSong && !endingSong){
-				if (health > healthDrain)
+		if(!inCutscene){
+			if (startedSong && !endingSong){
+				if (health > healthDrain){
 					health -= healthDrain * elapsed;
+					if(health < healthDrain)
+						health = healthDrain;
+				}
 			}
 		}
 
@@ -2480,7 +2478,7 @@ class PlayState extends MusicBeatState
 		////
 		if (!endingSong){
 			//// time travel
-			if (!startingSong #if !debug && chartingMode #end){
+			if (startedSong #if !debug && chartingMode #end){
 				if (FlxG.keys.justPressed.ONE) {
 					KillNotes();
 					inst.onComplete();
@@ -2503,24 +2501,30 @@ class PlayState extends MusicBeatState
 				pause();
 				MusicBeatState.switchState(new CharacterEditorState(SONG.player2));
 
-			}else if (canReset && !inCutscene && startedCountdown && controls.RESET) {
+			}else if (canReset && !inCutscene && controls.RESET) {
 				// RESET = Quick Game Over Screen
 				doGameOver();
 
 			}else if (doDeathCheck()) {
 				// die lol
 
-			}else if (controls.PAUSE && startedCountdown && canPause) {
+			}else if (canPause && controls.PAUSE) {
 				openPauseMenu();
 			}
 		}
 
-		if (startedCountdown && !paused) {
-
-			if (startingSong) {
+		if (!paused) {
+			if (!startedCountdown) {
+				// wait a little for lag spikes to pass lol
+				if (elapsed < 0.3) goodTicks++; else goodTicks = 0;		
+				if (goodTicks > 6) startCountdown();
+			}
+			else if (!startedSong) {
 				Conductor.songPosition += elapsed * 1000;
-				if (Conductor.songPosition >= 0)
-					startSong(0);
+				if (Conductor.songPosition >= PlayState.startOnTime) {
+					startSong(PlayState.startOnTime);
+					PlayState.startOnTime = 0;
+				}
 			}
 			else if (Conductor.songPosition >= 0) 
 			{
@@ -2572,7 +2576,6 @@ class PlayState extends MusicBeatState
 		MusicBeatState.switchState(new ChartingState(SONG, FlxG.keys.pressed.SHIFT ? curSection : -1));
 	}
 
-	public var isDead:Bool = false;
 	function doDeathCheck(?skipHealthCheck:Bool = false) {
 		if (isDead || practiceMode)
 			return false;
@@ -2974,7 +2977,7 @@ class PlayState extends MusicBeatState
 	public function endSong():Void
 	{
 	// Should kill you if you tried to cheat
-		if (!startingSong) {
+		if (startedSong) {
 			for (field in playfields.members) {
 				if(field.isPlayer) {
 					for(daNote in field.spawnedNotes) {
@@ -3592,6 +3595,8 @@ class PlayState extends MusicBeatState
 			daNote.ratingDisabled = true;
 			daNote.noMissAnimation = true;
 		}
+
+		daNote.hitResult.hitDiff = Conductor.safeZoneOffset;
 		
 		if (!daNote.ratingDisabled) {
 			stats.judged.push({
@@ -3602,7 +3607,8 @@ class PlayState extends MusicBeatState
 			
 			if (!mine) {
 				songMisses++;
-				applyJudgment(daNote.hitResult.judgment, Conductor.safeZoneOffset);
+				applyNoteJudgment(daNote, false);
+				//applyJudgment(daNote.hitResult.judgment, Conductor.safeZoneOffset);
 			}else {
 				applyJudgment(MISS_MINE, Conductor.safeZoneOffset);
 				health -= daNote.missHealth * healthLoss;
@@ -3703,7 +3709,7 @@ class PlayState extends MusicBeatState
 		
 	}
 
-	inline function getNoteCharacters(note:Note, field:PlayField):Array<Character> {
+	function getNoteCharacters(note:Note, field:PlayField):Array<Character> {
 		var chars:Array<Character> = note.characters.copy();
 
 		if (note.gfNote)
@@ -3732,8 +3738,10 @@ class PlayState extends MusicBeatState
 			track.volume = 1;
 
 		// Sing animations
-		for (char in getNoteCharacters(note, field)) 
-			char.playNote(note, field);
+		var chars: Array<Character> = getNoteCharacters(note, field);
+		if (note.noteScript == null || callScript(note.noteScript, "playNoteAnim", [note, field, chars]) != Globals.Function_Stop)
+			for (char in chars) 
+				char.playNote(note, field);
 		
 		// Strum animations
 		/*var spr:StrumNote = field.strumNotes[note.column];
@@ -3918,11 +3926,6 @@ class PlayState extends MusicBeatState
 			camGame.zoom += camZoom * zoomMult;
 		camHUD.zoom += hudZoom * zoomMult;
 	}
-
-	// -1 = zoom every section
-	// 0 = dont zoom
-	public var zoomEveryBeat:Int = -1;
-	public var beatToZoom:Int = 0;
 		
 	override function beatHit()
 	{
@@ -4153,7 +4156,7 @@ class PlayState extends MusicBeatState
 		paused = false;
 		active = true;
 
-		if (!startingSong)
+		if (startedSong)
 		{
 			Conductor.resumeSong();
 		}
