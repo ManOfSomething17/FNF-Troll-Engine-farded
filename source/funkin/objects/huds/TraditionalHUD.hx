@@ -160,6 +160,7 @@ class TraditionalHUD extends CommonHUD
 	}
 
 	function getStatusText():String {
+		/*
 		if (PlayState.instance.cpuControlled && useSubtleMark)
 			return botplayString;
 
@@ -174,6 +175,28 @@ class TraditionalHUD extends CommonHUD
 		}
 		
 		text += separator + getGradeText();
+
+		if (ClientPrefs.npsDisplay)
+			text += separator + getNPSText();
+		*/
+
+		if (PlayState.instance.cpuControlled && useSubtleMark)
+			return botplayString;
+
+		var text:String = getScoreText();
+
+		if (!showJudgeCounter) 
+			text += separator + getComboBreaksText();
+		
+		if (grade != "?") {
+			text += separator + getRatingText()
+			+ separator + getGradeText()
+			+ ' ' + getClearTypeText();
+		}
+		else
+		{
+			text += separator + getRatingText() + getGradeText();
+		}
 
 		if (ClientPrefs.npsDisplay)
 			text += separator + getNPSText();
@@ -193,7 +216,11 @@ class TraditionalHUD extends CommonHUD
 	inline function getRatingText():String
 	{
 		final ratPerc:Float = CoolMath.floorDecimal(ratingPercent * 100, 2);
-		return '$ratingString: $ratPerc%';
+
+		if (grade != "?")
+			return '$ratingString: $ratPerc%';
+		else
+			return '$ratingString: ';
 	}
 
 	inline function getClearTypeText():String
@@ -208,7 +235,8 @@ class TraditionalHUD extends CommonHUD
 	}
 
 	inline function getGradeText() {
-		return '$rankString: $grade';
+		// return '$rankString: $grade';
+		return '$grade';
 	}
 
 	function refreshFCColour(){
