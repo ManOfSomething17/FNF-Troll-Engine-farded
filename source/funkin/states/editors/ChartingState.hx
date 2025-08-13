@@ -18,6 +18,7 @@ import flixel.*;
 import flixel.group.FlxGroup;
 import flixel.group.FlxSpriteGroup;
 import flixel.input.keyboard.FlxKey;
+import flixel.util.FlxGradient;
 import flixel.addons.display.FlxGridOverlay;
 import flixel.addons.ui.*;
 import flixel.addons.transition.FlxTransitionableState;
@@ -218,6 +219,7 @@ class ChartingState extends MusicBeatState
 	var songId:String;
 	var songLength:Float = 0.0;
 
+	var iconBG:FlxSprite;
 	var leftIcon:HealthIcon;
 	var rightIcon:HealthIcon;
 
@@ -432,7 +434,7 @@ class ChartingState extends MusicBeatState
 		
 		FlxTransitionableState.skipNextTransOut = true;
 
-		persistentDraw = true;
+		updateSongPos = false;
 
 		onLoadMetadata();
 		
@@ -479,21 +481,6 @@ class ChartingState extends MusicBeatState
 		waveformSprite = new FlxSprite(GRID_SIZE, 0).makeGraphic(FlxG.width, FlxG.height, 0x00FFFFFF);
 		add(waveformSprite);
 
-		var eventIcon:FlxSprite = new FlxSprite(-GRID_SIZE - 5, 15, Paths.image('eventArrow'));
-		leftIcon = new HealthIcon('bf');
-		rightIcon = new HealthIcon('dad');
-		eventIcon.scrollFactor.set(1, 0);
-		leftIcon.scrollFactor.set(1, 0);
-		rightIcon.scrollFactor.set(1, 0);
-
-		eventIcon.setGraphicSize(30, 30);
-		leftIcon.setGraphicSize(0, 45);
-		rightIcon.setGraphicSize(0, 45);
-
-		add(eventIcon);
-		add(leftIcon);
-		add(rightIcon);
-
 		curRenderedSustains = new FlxTypedGroup<FlxSprite>();
 		curRenderedNotes = new FlxTypedGroup<Note>();
 		curRenderedNoteType = new FlxTypedGroup<FlxText>();
@@ -537,6 +524,32 @@ class ChartingState extends MusicBeatState
 		dummyArrow = CoolUtil.blankSprite(GRID_SIZE, GRID_SIZE);
 		add(dummyArrow);
 
+		////
+		iconBG = FlxGradient.createGradientFlxSprite(1, 45 + 5 * 2, [0xFF535353, 0x00535353]);
+		iconBG.scale.x = FlxG.width;
+		iconBG.updateHitbox();
+		iconBG.scrollFactor.set(0, 0);
+		add(iconBG);
+
+		var eventIcon:FlxSprite = new FlxSprite(GRID_SIZE * 0.5 - 30 * 0.5, (55 - 30) * 0.5, Paths.image('eventArrow'));
+		eventIcon.scrollFactor.set(1, 0);
+		eventIcon.setGraphicSize(30, 30);
+		eventIcon.updateHitbox();
+		add(eventIcon);
+		
+		leftIcon = new HealthIcon('bf');
+		leftIcon.scrollFactor.set(1, 0);
+		leftIcon.setGraphicSize(0, 45);
+		leftIcon.updateHitbox();
+		add(leftIcon);
+		
+		rightIcon = new HealthIcon('dad');
+		rightIcon.scrollFactor.set(1, 0);
+		rightIcon.setGraphicSize(0, 45);
+		rightIcon.updateHitbox();
+		add(rightIcon);
+
+		////
 		var text =
 		"W/S or Mouse Wheel - Change strum time
 		\nA/D - Go to the previous/next section
@@ -1616,7 +1629,7 @@ class ChartingState extends MusicBeatState
 		blockPressWhileScrolling.push(waveformTrackDropDown);
 
 		//
-		trackVolumeSlider = new FlxUISlider(
+		trackVolumeSlider = new CustomFlxUISlider(
 			this, 
 			'_curTrackVolume', 
 			waveformTrackDropDown.x + 150 - 10, 
@@ -1695,11 +1708,11 @@ class ChartingState extends MusicBeatState
 		disableAutoScrolling.callback = () -> {options.noAutoScroll = disableAutoScrolling.checked;}
 		disableAutoScrolling.checked = options.noAutoScroll == true;
 
-		var sliderHitVol = new FlxUISlider(this, 'hitsoundVolume', 10, startY + 90, 0, 1, 125, null, 5, FlxColor.WHITE, FlxColor.BLACK);
+		var sliderHitVol = new CustomFlxUISlider(this, 'hitsoundVolume', 10, startY + 90, 0, 1, 125, null, 5, FlxColor.WHITE, FlxColor.BLACK);
 		sliderHitVol.nameLabel.text = 'Hitsound Volume';
 		sliderHitVol.value = hitsoundVolume;
 
-		var sliderRate = new FlxUISlider(this, 'playbackSpeed', 68, 325, 0.5, 3, 150, null, 5, FlxColor.WHITE, FlxColor.BLACK);
+		var sliderRate = new CustomFlxUISlider(this, 'playbackSpeed', 68, 325, 0.5, 3, 150, null, 5, FlxColor.WHITE, FlxColor.BLACK);
 		sliderRate.nameLabel.text = 'Playback Rate';
 		sliderRate.value = playbackSpeed;
 
@@ -1797,7 +1810,7 @@ class ChartingState extends MusicBeatState
 			switch (label)
 			{
 				case 'Must hit section':
-					_song.notes[curSec].mustHitSection = check.checked;
+					new ChangeMustHitSectionAction(curSec, !FlxG.keys.pressed.CONTROL);
 
 					updateGrid();
 					updateHeads();
@@ -1897,7 +1910,7 @@ class ChartingState extends MusicBeatState
 		}
 		else if (id == FlxUISlider.CHANGE_EVENT)
 		{
-			var sender:FlxUISlider = cast sender;
+			var sender:CustomFlxUISlider = cast sender;
 
 			
 		}
@@ -1997,10 +2010,18 @@ class ChartingState extends MusicBeatState
 		FlxG.mouse.visible = true; //cause reasons. trust me
 
 		var movedDummyY:Bool = false;
-		var onGrid:Bool =	FlxG.mouse.x >= gridBG.x
+		var onIcons:Bool = FlxG.mouse.overlaps(iconBG);
+		var onGrid:Bool = !onIcons
+						&&	FlxG.mouse.x >= gridBG.x
 						&&	FlxG.mouse.x <	gridBG.x + gridBG.width
 						&&	FlxG.mouse.y >= gridBG.y
 						&&	FlxG.mouse.y <	gridBG.y + gridBG.height;
+
+		if (onIcons && FlxG.mouse.justPressed) {
+			if (FlxG.mouse.overlaps(rightIcon)) {
+				new ChangeMustHitSectionAction(curSec, true);
+			}
+		}
 
 		if (onGrid){
 			dummyArrow.visible = true;
@@ -2200,22 +2221,7 @@ class ChartingState extends MusicBeatState
 
 	function updateKeys(elapsed:Float) {
 		if (FlxG.keys.justPressed.M) {
-			// Change mustHitSection value
-			var mustHit = !_song.notes[curSec].mustHitSection;
-			_song.notes[curSec].mustHitSection = mustHit;
-			check_mustHitSection.checked = mustHit;
-
-			if (!FlxG.keys.pressed.CONTROL) {
-				// Move notes to accomodate for the change
-				for (i in 0..._song.notes[curSec].sectionNotes.length) {
-					var note:NoteData = _song.notes[curSec].sectionNotes[i];
-					note.column = (note.column + _song.keyCount) % (_song.keyCount * 2);
-					_song.notes[curSec].sectionNotes[i] = note;
-				}
-			}
-
-			updateGrid();
-			updateHeads();	
+			new ChangeMustHitSectionAction(curSec, !FlxG.keys.pressed.CONTROL);
 		}	
 
 		if (curSelectedNote != null) {
@@ -2754,8 +2760,8 @@ class ChartingState extends MusicBeatState
 		rightIcon.setGraphicSize(0, 45);
 		rightIcon.updateHitbox();
 
-		leftIcon.setPosition(GRID_SIZE * _song.keyCount * 0.5 - leftIcon.width * 0.5, 5);
-		rightIcon.setPosition(GRID_SIZE * _song.keyCount * 1.5 - rightIcon.width * 0.5, 5);
+		leftIcon.setPosition(GRID_SIZE * (1 + _song.keyCount * 0.5) - leftIcon.width * 0.5, 5);
+		rightIcon.setPosition(GRID_SIZE * (1 + _song.keyCount * 1.5) - rightIcon.width * 0.5, 5);
 	}
 
 	function updateNoteSteps():Void
@@ -3363,6 +3369,67 @@ class ChartingState extends MusicBeatState
 class CustomFlxUITabMenu extends FlxUITabMenu {
 	override function sortTabs(a, b):Int
 		return 0;
+}
+
+/** 
+	shit fix for sliders only updating while your mouse is over them 
+**/
+private class CustomFlxUISlider extends flixel.addons.ui.FlxUISlider {
+	var _holding = false;
+
+	override function get_relativePos() {
+		var v = super.get_relativePos();
+		return v < 0 ? 0 : v;
+	}
+
+	override function update(elapsed) {
+		#if (flixel >= "5.7.0")
+		final camera = getCameras()[0];// else use this.camera
+		#end
+		final mouse = FlxG.mouse.getScreenPosition(camera);
+		final hoveringOver = FlxMath.pointInFlxRect(mouse.x, mouse.y, _bounds);
+
+		if (!FlxG.mouse.pressed)
+			_holding = false;
+		else if (FlxG.mouse.justPressed && hoveringOver)
+			_holding = true;
+
+		if (_holding && !hoveringOver) {
+			handle.x = mouse.x;
+			updateValue();
+		}
+
+		super.update(elapsed);
+	}
+}
+
+private class ChangeMustHitSectionAction extends ChartingAction {
+	public var sectionNumber:Int;
+	public var adjustNotes:Bool;
+	
+	public function new(sectionNumber:Int, adjustNotes:Bool = true) {
+		this.sectionNumber = sectionNumber;
+		this.adjustNotes = adjustNotes;
+		super();
+	}
+
+	public function redo() {
+		var section = getSection(sectionNumber);
+		section.mustHitSection = !section.mustHitSection;
+
+		if (adjustNotes) {
+			for (note in section.sectionNotes)
+				note.column = (note.column + _song.keyCount) % (_song.keyCount * 2);
+		}
+
+		instance.check_mustHitSection.checked = section.mustHitSection;
+		instance.updateGrid();
+		instance.updateHeads();
+	}
+
+	public function undo() {
+		redo();
+	}
 }
 
 private class ChangeSustainAction extends NoteAction {
