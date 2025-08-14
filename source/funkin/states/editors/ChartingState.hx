@@ -567,7 +567,7 @@ class ChartingState extends MusicBeatState
 		";
 		
 		helpTextGrp = new FlxTypedGroup<FlxText>();
-		helpTextGrp.exists = !options.hideHelp;
+		helpTextGrp.exists = false;
 		add(helpTextGrp);
 
 		var tipTextY = FlxG.height/2 + GRID_SIZE;
@@ -629,6 +629,8 @@ class ChartingState extends MusicBeatState
 		else
 			waveformTrackDropDown.selectedId = "None";
 
+		var lol = new TimelineDisplay();
+		this.add(lol);
 		super.create();
 		FlxG.mouse.visible = true;
 	}
@@ -800,7 +802,7 @@ class ChartingState extends MusicBeatState
 
 		var daY = stepperKeyCount.y;
 
-		var player1DropDown = new FlxUIDropDownMenu(10, daY + 45, FlxUIDropDownMenu.makeStrIdLabelArray(characters, true), function(character:String)
+		var player1DropDown = new CustomFlxUIDropDownMenu(10, daY + 45, FlxUIDropDownMenu.makeStrIdLabelArray(characters, true), function(character:String)
 		{
 			_song.player1 = characters[Std.parseInt(character)];
 			updateHeads();
@@ -808,7 +810,7 @@ class ChartingState extends MusicBeatState
 		player1DropDown.selectedLabel = _song.player1;
 		blockPressWhileScrolling.push(player1DropDown);
 
-		var gfVersionDropDown = new FlxUIDropDownMenu(player1DropDown.x, player1DropDown.y + 40, FlxUIDropDownMenu.makeStrIdLabelArray(characters, true), function(character:String)
+		var gfVersionDropDown = new CustomFlxUIDropDownMenu(player1DropDown.x, player1DropDown.y + 40, FlxUIDropDownMenu.makeStrIdLabelArray(characters, true), function(character:String)
 		{
 			_song.gfVersion = characters[Std.parseInt(character)];
 			updateHeads();
@@ -816,7 +818,7 @@ class ChartingState extends MusicBeatState
 		gfVersionDropDown.selectedLabel = _song.gfVersion;
 		blockPressWhileScrolling.push(gfVersionDropDown);
 
-		var player2DropDown = new FlxUIDropDownMenu(player1DropDown.x, gfVersionDropDown.y + 40, FlxUIDropDownMenu.makeStrIdLabelArray(characters, true), function(character:String)
+		var player2DropDown = new CustomFlxUIDropDownMenu(player1DropDown.x, gfVersionDropDown.y + 40, FlxUIDropDownMenu.makeStrIdLabelArray(characters, true), function(character:String)
 		{
 			_song.player2 = characters[Std.parseInt(character)];
 			updateHeads();
@@ -833,7 +835,7 @@ class ChartingState extends MusicBeatState
 		else
 			stages.sort(CoolUtil.alphabeticalSort);
 		
-		var stageDropDown = new FlxUIDropDownMenu(
+		var stageDropDown = new CustomFlxUIDropDownMenu(
 			player1DropDown.x + 140, 
 			player1DropDown.y, 
 			FlxUIDropDownMenu.makeStrIdLabelArray(stages, true), 
@@ -846,7 +848,7 @@ class ChartingState extends MusicBeatState
 		stageDropDown.selectedLabel = _song.stage;
 		blockPressWhileScrolling.push(stageDropDown);
 
-		var skinDropdown = new FlxUIDropDownMenu(
+		var skinDropdown = new CustomFlxUIDropDownMenu(
 			stageDropDown.x, stageDropDown.y + 40, 
 			FlxUIDropDownMenu.makeStrIdLabelArray(skins, true), 
 			function(skin:String){
@@ -1228,7 +1230,7 @@ class ChartingState extends MusicBeatState
 			displayNameList[i] = i + '. ' + displayNameList[i];
 		}
 
-		noteTypeDropDown = new FlxUIDropDownMenu(10, 105, FlxUIDropDownMenu.makeStrIdLabelArray(displayNameList, true), function(character:String)
+		noteTypeDropDown = new CustomFlxUIDropDownMenu(10, 105, FlxUIDropDownMenu.makeStrIdLabelArray(displayNameList, true), function(character:String)
 		{
 			var typeIdx = Std.parseInt(character);
 			currentNoteType = noteTypeIntMap.get(typeIdx);
@@ -1302,7 +1304,7 @@ class ChartingState extends MusicBeatState
 		var text:FlxText = new FlxText(20, 30, 0, "Event:");
 		tab_group_event.add(text);
 
-		eventDropDown = new FlxUIDropDownMenu(
+		eventDropDown = new CustomFlxUIDropDownMenu(
 			20, 50, 
 			FlxUIDropDownMenu.makeStrIdLabelArray(leEvents, true), 
 			function(pressed:String) {
@@ -1621,7 +1623,7 @@ class ChartingState extends MusicBeatState
 			trackNamesArray.push(trackName);
 
 		//
-		waveformTrackDropDown = new FlxUIDropDownMenu(
+		waveformTrackDropDown = new CustomFlxUIDropDownMenu(
 			10, 100, 
 			FlxUIDropDownMenu.makeStrIdLabelArray(trackNamesArray, false), 
 			selectTrack
@@ -1993,6 +1995,9 @@ class ChartingState extends MusicBeatState
 		}
 
 		for (dropDownMenu in blockPressWhileScrolling) {
+			if (dropDownMenu.header.button.status == FlxButton.HIGHLIGHT)
+				return true;
+
 			if (dropDownMenu.dropPanel.visible)
 				return true;
 		}
@@ -2405,7 +2410,7 @@ class ChartingState extends MusicBeatState
 		}
 
 		if (FlxG.keys.justPressed.F1) {
-			helpTextGrp.exists = !helpTextGrp.exists;
+			helpTextGrp.exists = false;
 			options.hideHelp = !helpTextGrp.exists;
 		}
 
@@ -3371,6 +3376,28 @@ class CustomFlxUITabMenu extends FlxUITabMenu {
 		return 0;
 }
 
+/**
+	i don't like having to find stuff on a 20+ long list
+**/
+private class CustomFlxUIDropDownMenu extends flixel.addons.ui.FlxUIDropDownMenu.FlxUIDropDownMenu {
+	override function checkClickOff() {
+		if (!dropPanel.visible && header.button.status == FlxButton.HIGHLIGHT)
+		{
+			if (FlxG.mouse.wheel != 0) {
+				var idx:Int = 0;
+				for (i => btn in list) {
+					if (btn.label.text != selectedLabel) continue;
+					idx = i;
+					break;
+				}
+				idx = CoolUtil.updateIndex(idx, -FlxG.mouse.wheel, list.length);
+				onClickItem(idx);
+			}
+		}
+		super.checkClickOff();
+	}
+}
+
 /** 
 	shit fix for sliders only updating while your mouse is over them 
 **/
@@ -3400,6 +3427,102 @@ private class CustomFlxUISlider extends flixel.addons.ui.FlxUISlider {
 		}
 
 		super.update(elapsed);
+	}
+}
+
+private class TimelineDisplay extends FlxBasic {
+	public var uaWidth = 250;
+	public var uaHeight = 16;
+
+	public var curIdx:Int = -1;
+	public var scrollIdx:Int = 0;
+
+	public var bgs:Array<FlxSprite> = [];
+	public var txts:Array<FlxText> = [];
+
+	public function new(displayLength:Int = 10) {
+		super();
+
+		var width = uaWidth;
+		var height = uaHeight * displayLength;
+
+		var x = 5;
+		var y = FlxG.height - height - 5;
+
+		var text_hPadding = 5;
+
+		for (i in 0...displayLength) {
+			var bg = CoolUtil.blankSprite(uaWidth, uaHeight, 0xFF262626);
+			bg.scrollFactor.set();
+			bg.setPosition(x, y + i * uaHeight);
+			bgs[i] = bg;
+
+			var txt = new FlxText(
+				(bg.x + text_hPadding), 
+				(bg.y), 
+				(uaWidth - text_hPadding - text_hPadding),
+				"", 
+				8
+			);
+
+			txt.y += (uaHeight - txt.height) / 2;
+			txt.scrollFactor.set();
+			txt.wordWrap = false;
+			txts[i] = txt;
+		}
+	}
+
+	public function updateDisplay() {
+		final utRay = ChartingState.instance.utRay;
+		var half = Math.floor(txts.length / 2);
+		var offi = (utRay.length - curIdx);
+		var offi2 = FlxMath.maxInt(0, offi - half);
+		var scrollIdx = scrollIdx + offi2;
+
+		for (i in 1...txts.length + 1) {
+			var actionIdx = utRay.length - i - scrollIdx;
+			var action = (actionIdx < 0) ? null : utRay[actionIdx];
+
+			var txtIdx = txts.length - i;
+			var txt = (txtIdx < 0) ? null : txts[txtIdx];
+			if (txt == null) continue;
+
+			var bg = bgs[txtIdx];
+			var action_reverted = actionIdx > curIdx;
+
+			if (action == null) bg.color = 0xFF262626; // none
+			else if (actionIdx == curIdx) bg.color = 0xFF195BA0; // is current
+			else if (action_reverted) bg.color = 0xFF8C8C8C; // was reverted
+			else bg.color = 0xFF262626; // is past
+
+			txt.color = action_reverted ? 0xFF000000 : 0xFFFFFFFF;
+			txt.text = (action == null) ? "" : Std.string(action);
+		}
+	}
+
+	override function update(elapsed:Float) {
+		if (FlxG.keys.justPressed.V) {
+			scrollIdx--;
+			updateDisplay();
+		}
+		if (FlxG.keys.justPressed.N) {
+			scrollIdx++;
+			updateDisplay();	
+		}
+
+		if (curIdx != ChartingState.instance.utIdx) {
+			curIdx = ChartingState.instance.utIdx;
+			scrollIdx = 0;
+			updateDisplay();
+		}
+
+		for (obj in bgs) obj.update(elapsed);
+		for (obj in txts) obj.update(elapsed);
+	}
+
+	override function draw() {
+		for (obj in bgs) obj.draw();
+		for (obj in txts) obj.draw();
 	}
 }
 
