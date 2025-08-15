@@ -268,7 +268,9 @@ class ChartingState extends MusicBeatState
 	private var blockPressWhileScrolling:Array<FlxUIDropDownMenu> = [];
 
 	var waveformSprite:FlxSprite;
-	var gridLayer:FlxTypedGroup<FlxSprite>;
+	var gridLayer:FlxTypedGroup<FlxBasic>;
+	var beatSeparators:FlxTypedGroup<FlxSprite>;
+	var fieldSeparators:FlxTypedGroup<FlxSprite>;
 
 	public static var quantization:Int = 16;
 	public var quantizationMult:Float = (quantization / 16);
@@ -485,8 +487,11 @@ class ChartingState extends MusicBeatState
 		bg.screenCenter();
 		add(bg);
 
-		gridLayer = new FlxTypedGroup<FlxSprite>();
+		gridLayer = new FlxTypedGroup<FlxBasic>();
 		add(gridLayer);
+
+		beatSeparators = new FlxTypedGroup<FlxSprite>();
+		fieldSeparators = new FlxTypedGroup<FlxSprite>();
 
 		waveformSprite = new FlxSprite(GRID_SIZE, 0).makeGraphic(FlxG.width, FlxG.height, 0x00FFFFFF);
 		add(waveformSprite);
@@ -831,12 +836,16 @@ class ChartingState extends MusicBeatState
 		#end
 
 		////
-		var characters:Array<String> = CharacterData.getAllCharacters();
+		var characters:Array<Null<String>> = CharacterData.getAllCharacters();
 		characters.sort(CoolUtil.alphabeticalSort);
+		characters.insert(0, "null");
+		var ddCharacters = FlxUIDropDownMenu.makeStrIdLabelArray(characters, true);
+		ddCharacters[0].label = "<null>";
+		characters[0] = null;
 
 		var daY = stepperKeyCount.y;
 
-		var player1DropDown = new CustomFlxUIDropDownMenu(10, daY + 45, FlxUIDropDownMenu.makeStrIdLabelArray(characters, true), function(character:String)
+		var player1DropDown = new CustomFlxUIDropDownMenu(10, daY + 45, ddCharacters, function(character:String)
 		{
 			_song.player1 = characters[Std.parseInt(character)];
 			updateHeads();
@@ -844,7 +853,7 @@ class ChartingState extends MusicBeatState
 		player1DropDown.selectedLabel = _song.player1;
 		blockPressWhileScrolling.push(player1DropDown);
 
-		var gfVersionDropDown = new CustomFlxUIDropDownMenu(player1DropDown.x, player1DropDown.y + 40, FlxUIDropDownMenu.makeStrIdLabelArray(characters, true), function(character:String)
+		var gfVersionDropDown = new CustomFlxUIDropDownMenu(player1DropDown.x, player1DropDown.y + 40, ddCharacters, function(character:String)
 		{
 			_song.gfVersion = characters[Std.parseInt(character)];
 			updateHeads();
@@ -852,7 +861,7 @@ class ChartingState extends MusicBeatState
 		gfVersionDropDown.selectedLabel = _song.gfVersion;
 		blockPressWhileScrolling.push(gfVersionDropDown);
 
-		var player2DropDown = new CustomFlxUIDropDownMenu(player1DropDown.x, gfVersionDropDown.y + 40, FlxUIDropDownMenu.makeStrIdLabelArray(characters, true), function(character:String)
+		var player2DropDown = new CustomFlxUIDropDownMenu(player1DropDown.x, gfVersionDropDown.y + 40, ddCharacters, function(character:String)
 		{
 			_song.player2 = characters[Std.parseInt(character)];
 			updateHeads();
@@ -863,11 +872,9 @@ class ChartingState extends MusicBeatState
 
 		////
 		var stages = Stage.getAllStages();
-
-		if (stages.length == 0) 
-			stages.push("stage");
-		else
-			stages.sort(CoolUtil.alphabeticalSort);
+		stages.sort(CoolUtil.alphabeticalSort);
+		stages.remove("empty");
+		stages.insert(0, "empty");
 		
 		var stageDropDown = new CustomFlxUIDropDownMenu(
 			player1DropDown.x + 140, 
@@ -2166,6 +2173,18 @@ class ChartingState extends MusicBeatState
 			}
 		}
 
+		if (!checkOverDropdown() && FlxG.mouse.wheel != 0) {
+			if (!options.mouseScrollingQuant)
+				Conductor.songPosition -= (FlxG.mouse.wheel * Conductor.stepCrochet);
+			else{
+				var snap = Conductor.stepCrochet / quantizationMult;
+				Conductor.songPosition = CoolUtil.snap(Conductor.songPosition, snap) - (snap * FlxG.mouse.wheel);
+			}
+
+			pauseTracks();
+		}
+
+		////
 		if (Conductor.playing)
 			updateSongPosition();
 
@@ -2310,17 +2329,6 @@ class ChartingState extends MusicBeatState
 
 		if (FlxG.keys.justPressed.R)
 			changeSection(FlxG.keys.pressed.SHIFT ? 0 : curSec, true);
-
-		if (!checkOverDropdown() && FlxG.mouse.wheel != 0) {
-			if (!options.mouseScrollingQuant)
-				Conductor.songPosition -= (FlxG.mouse.wheel * Conductor.stepCrochet);
-			else{
-				var snap = Conductor.stepCrochet / quantizationMult;
-				Conductor.songPosition = CoolUtil.snap(Conductor.songPosition, snap) - (snap * FlxG.mouse.wheel);
-			}
-
-			pauseTracks();
-		}
 
 		if (FlxG.keys.pressed.W || FlxG.keys.pressed.S)
 		{
@@ -2490,6 +2498,10 @@ class ChartingState extends MusicBeatState
 	/** Creates the currently visible sections grid background and their objects (notes, events, waveform) **/
 	function reloadGridLayer() 
 	{
+		beatSeparators.killMembers();
+		fieldSeparators.killMembers();
+		gridLayer.remove(beatSeparators);
+		gridLayer.remove(fieldSeparators);
 		wipeGroup(gridLayer);
 		
 		////
@@ -2552,25 +2564,29 @@ class ChartingState extends MusicBeatState
 		}
 
 		// beat separators
-		var totalBeats:Float = currentSectionBeats + nextSectionBeats;
+		var totalBeats:Float = previousSectionBeats + currentSectionBeats + nextSectionBeats;
 		for (i in 1...Math.floor(totalBeats)) {
-			var beatsep1:FlxSprite = CoolUtil.blankSprite(gridBG.width, 1, 0xFFFF0000);
+			var beatsep1:FlxSprite = beatSeparators.recycle();
+			if (beatsep1 == null) {
+				beatsep1 = CoolUtil.blankSprite(gridBG.width, 1, 0xFFFF0000);
+				beatsep1.alpha = 0.25;
+				beatSeparators.add(beatsep1);
+			}
 			beatsep1.setPosition(gridBG.x, gridY + (i * GRID_SIZE * 4) * zoomList[curZoom]);
-			beatsep1.alpha = 0.25;
-			gridLayer.add(beatsep1);
 		}
+		gridLayer.add(beatSeparators);
 		
-		// player - opponent separator
-		var gridBlackLine:FlxSprite = CoolUtil.blankSprite(2, totalHeight, FlxColor.BLACK);
-		gridBlackLine.x = gridBG.x + gridBG.width - (GRID_SIZE * _song.keyCount);
-		gridBlackLine.y = gridY;
-		gridLayer.add(gridBlackLine);
-
-		// event separator
-		var gridBlackLine:FlxSprite = CoolUtil.blankSprite(2, totalHeight, FlxColor.BLACK);
-		gridBlackLine.x = gridBG.x + GRID_SIZE;
-		gridBlackLine.y = gridY;
-		gridLayer.add(gridBlackLine);
+		// field separators
+		var fields:Int = 2;
+		for (i in 0...fields) {
+			var gridBlackLine = fieldSeparators.recycle() ?? CoolUtil.blankSprite(2, totalHeight, FlxColor.BLACK);
+			gridBlackLine.x = -1 + gridBG.x + GRID_SIZE + (GRID_SIZE * _song.keyCount * i);
+			gridBlackLine.y = gridY;
+			gridBlackLine.scale.y = totalHeight;
+			gridBlackLine.updateHitbox();
+			fieldSeparators.add(gridBlackLine);
+		}
+		gridLayer.add(fieldSeparators);
 
 		updateWaveform();
 		updateGrid();
@@ -3379,6 +3395,7 @@ class ChartingState extends MusicBeatState
 		var fileName:String;
 		var _song:SwagSong = Reflect.copy(_song);
 
+		Reflect.deleteField(_song, "_chartEditor");
 		Reflect.deleteField(_song, "metadata");
 
 		if (Reflect.hasField(_song, "_path")) {
@@ -3445,6 +3462,8 @@ class ChartingState extends MusicBeatState
 	override function destroy() {
 		_session.curSec = curSec;
 		_session.songPosition = Conductor.songPosition;
+		for (id => snd in soundTracksMap)
+			_session.trackVolumes.set(id, snd.volume);
 		super.destroy();
 	}
 }
