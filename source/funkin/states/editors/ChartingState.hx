@@ -238,6 +238,9 @@ class ChartingState extends MusicBeatState
 	var songId:String;
 	var songLength:Float = 0.0;
 
+	var progressBG:FlxSprite;
+	var progressBar:CustomFlxUISlider;
+
 	var iconBG:FlxSprite;
 	var leftIcon:HealthIcon;
 	var rightIcon:HealthIcon;
@@ -264,8 +267,9 @@ class ChartingState extends MusicBeatState
 	var curZoom:Int = 2;
 
 	private var blockPressWhileTypingOn:Array<FlxUIInputText> = [];
-	private var blockPressWhileTypingOnStepper:Array<FlxUINumericStepper> = [];
+	private var blockPressWhileTypingOnStepper:Array<CustomFlxUINumericStepper> = [];
 	private var blockPressWhileScrolling:Array<FlxUIDropDownMenu> = [];
+	private var blockScrollWhileHovering:Array<FlxUISlider> = [];
 
 	var waveformSprite:FlxSprite;
 	var gridLayer:FlxTypedGroup<FlxBasic>;
@@ -541,6 +545,55 @@ class ChartingState extends MusicBeatState
 
 		dummyArrow = CoolUtil.blankSprite(GRID_SIZE, GRID_SIZE);
 		add(dummyArrow);
+		
+		////
+		progressBG = FlxGradient.createGradientFlxSprite(1, GRID_SIZE, [0xFF535353, 0xFF414040]);
+		progressBG.scale.x = FlxG.width;
+		progressBG.updateHitbox();
+		progressBG.scrollFactor.set(0, 0);
+		progressBG.y = FlxG.height - progressBG.height;
+		add(progressBG);
+
+		var w = Math.floor(progressBG.width / 3);
+		progressBar = new CustomFlxUISlider(
+			Conductor, 
+			'songPosition', 
+			progressBG.x + (progressBG.width - w) / 2,
+			progressBG.y,
+			0.0, 
+			songLength, 
+			w, 
+			null, 
+			5, 
+			FlxColor.WHITE, 
+			FlxColor.BLACK	
+		);
+		progressBar.setVariable = false;
+		progressBar.scrollStep = 0.0;
+		progressBar.callback = function(perc) {
+			if (!progressBar.dragging) return;
+			var playing;
+			if (playing = Conductor.playing) Conductor.pauseSong();
+			Conductor.songPosition = Math.ffloor(perc * songLength);
+			if (playing) Conductor.resumeSong();
+		}
+
+		progressBar.nameLabel.exists = false;
+		progressBar.valueLabel.exists = false;
+
+		progressBar.minLabel.text = "0:00";
+		progressBar.minLabel.x -= 30;
+		progressBar.minLabel.y = progressBar.body.y;
+
+		var mins = '' + Math.floor(songLength / 60000);
+		var secs = '' + Math.floor((songLength % 60000) / 1000);
+		progressBar.maxLabel.text = '$mins:${secs.length < 2 ? secs + '0' : secs}';
+		progressBar.maxLabel.x += 30;
+		progressBar.maxLabel.y = progressBar.body.y;
+
+		progressBar.y += (progressBG.height - progressBar.height) / 2;
+		add(progressBar);
+		progressBar.scrollFactor.set();
 
 		////
 		iconBG = FlxGradient.createGradientFlxSprite(1, 45 + 5 * 2, [0xFF535353, 0x00535353]);
@@ -798,17 +851,17 @@ class ChartingState extends MusicBeatState
 		clear_notes.color = FlxColor.RED;
 		clear_notes.label.color = FlxColor.WHITE;
 
-		var stepperSpeed:FlxUINumericStepper = new FlxUINumericStepper(10, UI_songTitle.y + 35, 0.1, 1, 0.1, 10, 1);
+		var stepperSpeed = new CustomFlxUINumericStepper(10, UI_songTitle.y + 35, 0.1, 1, 0.1, 10, 1);
 		stepperSpeed.value = _song.speed;
 		stepperSpeed.name = 'song_speed';
 		blockPressWhileTypingOnStepper.push(stepperSpeed);
 
-		var stepperBPM:FlxUINumericStepper = new FlxUINumericStepper(10, stepperSpeed.y + 35, 1, 1, 1, 9000, 3);
+		var stepperBPM = new CustomFlxUINumericStepper(10, stepperSpeed.y + 35, 1, 1, 1, 9000, 3);
 		stepperBPM.value = Conductor.bpm;
 		stepperBPM.name = 'song_bpm';
 		blockPressWhileTypingOnStepper.push(stepperBPM);
 
-		var stepperKeyCount:FlxUINumericStepper = new FlxUINumericStepper(10, stepperBPM.y + 35, 1, 4, 1, 10, 0);
+		var stepperKeyCount = new CustomFlxUINumericStepper(10, stepperBPM.y + 35, 1, 4, 1, 10, 0);
 		stepperKeyCount.value = _song.keyCount;
 		stepperKeyCount.name = 'song_keyCount';
 		blockPressWhileTypingOnStepper.push(stepperKeyCount);
@@ -960,11 +1013,11 @@ class ChartingState extends MusicBeatState
 		UI_box.addGroup(tab_group_song);
 	}
 
-	var stepperBeats:FlxUINumericStepper;
+	var stepperBeats:CustomFlxUINumericStepper;
 	var check_mustHitSection:FlxUICheckBox;
 	var check_gfSection:FlxUICheckBox;
 	var check_changeBPM:FlxUICheckBox;
-	var stepperSectionBPM:FlxUINumericStepper;
+	var stepperSectionBPM:CustomFlxUINumericStepper;
 	var check_altAnim:FlxUICheckBox;
 
 	var sectionToCopy:Int = 0;
@@ -987,7 +1040,7 @@ class ChartingState extends MusicBeatState
 		check_altAnim.checked = _song.notes[curSec].altAnim;
 		check_altAnim.name = 'check_altAnim';
 
-		stepperBeats = new FlxUINumericStepper(150, 25, 1, 1, 1, 9000, 3);
+		stepperBeats = new CustomFlxUINumericStepper(150, 25, 1, 1, 1, 9000, 3);
 		stepperBeats.value = getSectionBeats();
 		stepperBeats.name = 'section_beats';
 		blockPressWhileTypingOnStepper.push(stepperBeats);
@@ -996,7 +1049,7 @@ class ChartingState extends MusicBeatState
 		check_changeBPM.checked = _song.notes[curSec].changeBPM;
 		check_changeBPM.name = 'check_changeBPM';
 
-		stepperSectionBPM = new FlxUINumericStepper(150, check_changeBPM.y + 20, 1, Conductor.bpm, 0, 999, 1);
+		stepperSectionBPM = new CustomFlxUINumericStepper(150, check_changeBPM.y + 20, 1, Conductor.bpm, 0, 999, 1);
 		if(check_changeBPM.checked) {
 			stepperSectionBPM.value = _song.notes[curSec].bpm;
 		} else {
@@ -1087,7 +1140,7 @@ class ChartingState extends MusicBeatState
 		check_eventsSec.checked = true;
 
 		////
-		var stepperCopy:FlxUINumericStepper = null;
+		var stepperCopy:CustomFlxUINumericStepper = null;
 		var copyLastButton:FlxButton = new FlxButton(10, 220, "Copy last section", function()
 		{
 			var value:Int = Std.int(stepperCopy.value);
@@ -1129,7 +1182,7 @@ class ChartingState extends MusicBeatState
 		copyLastButton.setGraphicSize(80, 30);
 		copyLastButton.updateHitbox();
 		
-		stepperCopy = new FlxUINumericStepper(copyLastButton.x + 100, copyLastButton.y, 1, 1, -999, 999, 0);
+		stepperCopy = new CustomFlxUINumericStepper(copyLastButton.x + 100, copyLastButton.y, 1, 1, -999, 999, 0);
 		blockPressWhileTypingOnStepper.push(stepperCopy);
 
 		var swapSection:FlxButton = new FlxButton(10, copyLastButton.y + 80, "Swap sides", function()
@@ -1198,8 +1251,8 @@ class ChartingState extends MusicBeatState
 
 	var labelSusLength:FlxText;
 	var labelStrumTime:FlxText;
-	var stepperSusLength:FlxUINumericStepper;
-	var stepperStrumTime:FlxUINumericStepper;
+	var stepperSusLength:CustomFlxUINumericStepper;
+	var stepperStrumTime:CustomFlxUINumericStepper;
 	var noteTypeDropDown:FlxUIDropDownMenu;
 	var currentNoteType:String = '';
 
@@ -1210,11 +1263,11 @@ class ChartingState extends MusicBeatState
 
 		final DECIMALS:Int = 4;
 
-		stepperSusLength = new FlxUINumericStepper(10, 25, 1, 0, 0, Math.POSITIVE_INFINITY, DECIMALS, 1, new FlxUIInputText(0, 0, 120));
+		stepperSusLength = new CustomFlxUINumericStepper(10, 25, 1, 0, 0, Math.POSITIVE_INFINITY, DECIMALS, 1, new FlxUIInputText(0, 0, 120));
 		stepperSusLength.name = 'note_susLength';
 		blockPressWhileTypingOnStepper.push(stepperSusLength);
 
-		stepperStrumTime = new FlxUINumericStepper(10, 65, 1, 0, 0, Math.POSITIVE_INFINITY, DECIMALS, 1, new FlxUIInputText(0, 0, 120));
+		stepperStrumTime = new CustomFlxUINumericStepper(10, 65, 1, 0, 0, Math.POSITIVE_INFINITY, DECIMALS, 1, new FlxUIInputText(0, 0, 120));
 		stepperStrumTime.name = 'note_strumTime';
 		blockPressWhileTypingOnStepper.push(stepperStrumTime);
 
@@ -1537,8 +1590,8 @@ class ChartingState extends MusicBeatState
 		}
 	}
 
-	var metronomeStepper:FlxUINumericStepper;
-	var metronomeOffsetStepper:FlxUINumericStepper;
+	var metronomeStepper:CustomFlxUINumericStepper;
+	var metronomeOffsetStepper:CustomFlxUINumericStepper;
 
 	var waveformTrackDropDown:FlxUIDropDownMenu;
 	var waveformTrack:Null<FlxSound> = null;
@@ -1687,6 +1740,7 @@ class ChartingState extends MusicBeatState
 		trackVolumeSlider.nameLabel.text = 'Track Volume';
 		trackVolumeSlider.setVariable = false;
 		trackVolumeSlider.callback = changeSelectedTrackVolume;
+		blockScrollWhileHovering.push(trackVolumeSlider);
 
 		////////
 
@@ -1741,8 +1795,8 @@ class ChartingState extends MusicBeatState
 		metronome.callback = () -> {options.metronome = metronome.checked;}
 		metronome.checked = options.metronome == true;
 
-		metronomeStepper = new FlxUINumericStepper(15, 55, 5, _song.bpm, 1, 9000, 3);
-		metronomeOffsetStepper = new FlxUINumericStepper(metronomeStepper.x + 146, metronomeStepper.y, 25, 0, 0, 1000, 1);
+		metronomeStepper = new CustomFlxUINumericStepper(15, 55, 5, _song.bpm, 1, 9000, 3);
+		metronomeOffsetStepper = new CustomFlxUINumericStepper(metronomeStepper.x + 146, metronomeStepper.y, 25, 0, 0, 1000, 1);
 		blockPressWhileTypingOnStepper.push(metronomeStepper);
 		blockPressWhileTypingOnStepper.push(metronomeOffsetStepper);
 
@@ -1753,10 +1807,12 @@ class ChartingState extends MusicBeatState
 		var sliderHitVol = new CustomFlxUISlider(this, 'hitsoundVolume', 10, startY + 90, 0, 1, 125, null, 5, FlxColor.WHITE, FlxColor.BLACK);
 		sliderHitVol.nameLabel.text = 'Hitsound Volume';
 		sliderHitVol.value = hitsoundVolume;
+		blockScrollWhileHovering.push(sliderHitVol);
 
 		var sliderRate = new CustomFlxUISlider(this, 'playbackSpeed', 68, 325, 0.5, 3, 150, null, 5, FlxColor.WHITE, FlxColor.BLACK);
 		sliderRate.nameLabel.text = 'Playback Rate';
 		sliderRate.value = playbackSpeed;
+		blockScrollWhileHovering.push(sliderRate);
 
 		tab_group_chart.add(sliderHitVol);
 		tab_group_chart.add(sliderRate);
@@ -2042,12 +2098,24 @@ class ChartingState extends MusicBeatState
 		return false;
 	}
 
-	function checkOverDropdown():Bool {
+	function checkCanMouseScroll():Bool {
 		for (dropDownMenu in blockPressWhileScrolling) {
 			if (dropDownMenu.header.button.status == FlxButton.HIGHLIGHT)
-				return true;
+				return false;
 		}
-		return false;
+
+		for (slider in blockScrollWhileHovering) {
+			@:privateAccess
+			if (slider._justHovered)
+				return false;
+		}
+
+		for (stepper in blockPressWhileTypingOnStepper) {
+			if (stepper.hoveringText)
+				return false;
+		}
+
+		return true;
 	}
 
 	override function update(elapsed:Float)
@@ -2061,7 +2129,7 @@ class ChartingState extends MusicBeatState
 
 		var movedDummyY:Bool = false;
 		var onIcons:Bool = FlxG.mouse.overlaps(iconBG);
-		var onGrid:Bool = !onIcons
+		var onGrid:Bool = !onIcons && !FlxG.mouse.overlaps(progressBG)
 						&&	FlxG.mouse.x >= gridBG.x
 						&&	FlxG.mouse.x <	gridBG.x + gridBG.width
 						&&	FlxG.mouse.y >= gridBG.y
@@ -2173,7 +2241,7 @@ class ChartingState extends MusicBeatState
 			}
 		}
 
-		if (!checkOverDropdown() && FlxG.mouse.wheel != 0) {
+		if (checkCanMouseScroll() && FlxG.mouse.wheel != 0) {
 			if (!options.mouseScrollingQuant)
 				Conductor.songPosition -= (FlxG.mouse.wheel * Conductor.stepCrochet);
 			else{
@@ -3474,8 +3542,20 @@ class CustomFlxUITabMenu extends FlxUITabMenu {
 		return 0;
 }
 
+private class CustomFlxUINumericStepper extends flixel.addons.ui.FlxUINumericStepper {
+	public var hoveringText:Bool = false;
+
+	override function update(elapsed:Float) {
+		if (hoveringText = FlxG.mouse.overlaps(text_field, text_field.camera)) {
+			if (FlxG.mouse.wheel > 0) _onPlus();
+			else if (FlxG.mouse.wheel < 0) _onMinus();
+		}
+		super.update(elapsed);
+	}
+}
+
 /**
-	i don't like having to find stuff on a 20+ long list
+	Allow quick mouse wheel option scrolling without having to open the dropdown
 **/
 private class CustomFlxUIDropDownMenu extends flixel.addons.ui.FlxUIDropDownMenu.FlxUIDropDownMenu {
 	override function checkClickOff() {
@@ -3497,31 +3577,31 @@ private class CustomFlxUIDropDownMenu extends flixel.addons.ui.FlxUIDropDownMenu
 }
 
 /** 
-	shit fix for sliders only updating while your mouse is over them 
+	Allow mouse wheel to slide the handle
 **/
 private class CustomFlxUISlider extends flixel.addons.ui.FlxUISlider {
-	var _holding = false;
-
-	override function get_relativePos() {
-		var v = super.get_relativePos();
-		return v < 0 ? 0 : v;
-	}
+	public var scrollStep:Float = 0.1;
 
 	override function update(elapsed) {
-		#if (flixel >= "5.7.0")
-		final camera = getCameras()[0];// else use this.camera
-		#end
-		final mouse = FlxG.mouse.getScreenPosition(camera);
-		final hoveringOver = FlxMath.pointInFlxRect(mouse.x, mouse.y, _bounds);
+		if (_justHovered && !dragging && scrollStep != 0.0 && FlxG.mouse.wheel != 0)
+		{
+			var relativePos:Float = relativePos + FlxG.mouse.wheel * scrollStep;
 
-		if (!FlxG.mouse.pressed)
-			_holding = false;
-		else if (FlxG.mouse.justPressed && hoveringOver)
-			_holding = true;
+			value = minValue + (maxValue - minValue) * relativePos;
+			if (value < minValue) value = minValue;
+			else if (value > maxValue) value = maxValue; 
 
-		if (_holding && !hoveringOver) {
-			handle.x = mouse.x;
-			updateValue();
+			if ((setVariable) && (varString != null))
+			{
+				Reflect.setProperty(_object, varString, value);
+			}
+
+			_lastPos = relativePos;
+
+			if (callback != null)
+				callback(relativePos);
+
+			handle.x = expectedPos;
 		}
 
 		super.update(elapsed);
