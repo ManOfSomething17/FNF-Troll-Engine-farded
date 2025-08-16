@@ -111,9 +111,9 @@ class LevelStageProp extends FlxSprite
 		if (propData.animations != null) {
 			for (animation in propData.animations) {
 				if (animation.indices != null)
-					prop.animation.addByIndices(animation.name, animation.prefix, animation.indices, '', animation.fps ?? 24, animation.looped ?? false);
+					prop.animation.addByIndices(animation.name, animation.prefix, animation.indices, '', animation.fps ?? 24, animation.looped ?? false, animation.flipX ?? false, animation.flipY ?? false);
 				else
-					prop.animation.addByPrefix(animation.name, animation.prefix, animation.fps ?? 24, animation.looped ?? false);
+					prop.animation.addByPrefix(animation.name, animation.prefix, animation.fps ?? 24, animation.looped ?? false, animation.flipX ?? false, animation.flipY ?? false);
 
 				if (animation.offset != null && animation.offset.length == 2)
 					prop.offsets.set(animation.name, animation.offset);
