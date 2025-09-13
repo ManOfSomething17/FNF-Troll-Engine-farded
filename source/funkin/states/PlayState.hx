@@ -1385,9 +1385,12 @@ class PlayState extends MusicBeatState
 	function songIntroCutscene(){
 		inCutscene = true;
 		var cutscene: Cutscene = startCutscenes.runNextScene();
-		if(cutscene is VideoCutscene)
+
+		#if VIDEOS_ALLOWED
+		if (cutscene is VideoCutscene)
 			cutscene.cameras = [camOverlay];
-		
+		#end
+
 		add(cutscene);
 	}
 	
@@ -2603,6 +2606,10 @@ class PlayState extends MusicBeatState
 			{
 				updateSongPosition();
 			}
+			
+			if (Conductor.songPosition >= songLength) {
+				finishSong(false);
+			}
 		}
 
 		////
@@ -2997,9 +3004,12 @@ class PlayState extends MusicBeatState
 	public function endSongCutscenes(){
 		inCutscene = true;
 		var cutscene: Cutscene = endCutscenes.runNextScene();
+
+		#if VIDEOS_ALLOWED
 		if(cutscene is VideoCutscene)
 			cutscene.cameras = [camOverlay];
-		
+		#end
+
 		add(cutscene);
 	}
 
@@ -3552,7 +3562,7 @@ class PlayState extends MusicBeatState
 			if (note == null) {
 				var spr:StrumNote = field.strumNotes[column];
 				if (spr != null) {
-					spr.playAnim('pressed');
+					spr.playAnim('pressed', true);
 					spr.resetAnim = 0;
 				}
 			}else {
