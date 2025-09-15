@@ -58,7 +58,9 @@ class FNFGame extends FlxGame
 		startFullscreen = startFullscreen ?? FlxG.save.data.fullscreen;
 
 		super(gameWidth, gameHeight, initialState, updateFramerate, drawFramerate, skipSplash, startFullscreen);
+		#if FLX_SOUND_TRAY
 		_customSoundTray = flixel.system.ui.DefaultFlxSoundTray;
+		#end
 
 		FlxG.sound.volume = FlxG.save.data.volume;
 		FlxG.mouse.useSystemCursor = true;
@@ -224,7 +226,7 @@ class FNFGame extends FlxGame
 	}
 
 	// shader coords fix
-	private function resetSpriteCache() {
+	public function resetSpriteCache() {
 		for (cam in FlxG.cameras.list) {
 			if (cam != null && cam.filters != null)
 				Main.resetSpriteCache(cam.flashSprite);
