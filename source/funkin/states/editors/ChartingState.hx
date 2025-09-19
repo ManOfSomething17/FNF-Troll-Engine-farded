@@ -370,13 +370,14 @@ class ChartingState extends MusicBeatState
 	function adjustCamPos() {
 		camPos.x = GRID_SIZE * (1 + _song.keyCount);
 
+		var boxWidth = 300;
 		var chart_grid_end = FlxG.width / 2 + GRID_SIZE * _song.keyCount;
 
-		var ui_width_grid_snapped = Math.ceil(300 / GRID_SIZE) * GRID_SIZE;
-		var chart_grid_offset = ui_width_grid_snapped - 300;
+		var ui_width_grid_snapped = Math.ceil(boxWidth / GRID_SIZE) * GRID_SIZE;
+		var chart_grid_offset = ui_width_grid_snapped - boxWidth;
 
 		var ui_start = chart_grid_end + chart_grid_offset;
-		var ui_end = chart_grid_end + ui_width_grid_snapped + 300;
+		var ui_end = chart_grid_end + ui_width_grid_snapped + boxWidth;
 
 		var ui_space_leftover = (FlxG.width - chart_grid_end) - ui_width_grid_snapped;
 		
@@ -631,6 +632,7 @@ class ChartingState extends MusicBeatState
 		addNoteUI();
 		addEventsUI();
 		addChartingUI();
+		addTracksUI();
 
 		add(prevRenderedSustains);
 		add(prevRenderedNotes);
@@ -789,6 +791,21 @@ class ChartingState extends MusicBeatState
 		_song.events = eventsData;	
 	}
 
+	function showPopup(text:String, ?onAccept:Void->Void) {
+		if (onAccept != null)
+			openSubState(new Prompt(text, 0, onAccept));
+		else
+			openSubState(new Prompt(text, 0, onAccept, null, false, "OK", "OK"));
+	}
+
+	function showWarning(text:String, ?onAccept:Void->Void) {
+		if (options.ignoreWarnings) {
+			if (onAccept != null) onAccept();
+		}else {
+			showPopup(text, onAccept);
+		}
+	}
+
 	function addSongUI():Void
 	{
 		var UI_songTitle = new FlxUIInputText(10, 10, 70, _song.song, 8);
@@ -799,16 +816,16 @@ class ChartingState extends MusicBeatState
 
 		var reloadSongJson:FlxButton = new FlxButton(saveButton.x + 90, saveButton.y, "Reload JSON", function()
 		{
-			openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 0, loadJson.bind(_song.song), null, options.ignoreWarnings));
+			showWarning('This action will clear current progress.\n\nProceed?', loadJson.bind(_song.song));
 		});
 
 		var loadAutosaveBtn:FlxButton = new FlxButton(reloadSongJson.x, reloadSongJson.y + 30, 'Load Autosave', function()
 		{
 			var autosaved:Dynamic = options.autosave;
 			if (autosaved == null) {
-				openSubState(new Prompt("There is no autosaved data", 0, null, null, false, "OK", "OK"));
+				showPopup("There is no autosaved data");
 			}else if (!Std.isOfType(autosaved, String)) {
-				openSubState(new Prompt("Invalid autosaved data", 0, null, null, false, "OK", "OK"));
+				showPopup("Invalid autosaved data");
 			}else{
 				var _song:Dynamic = Json.parse(autosaved);
 				
@@ -822,8 +839,7 @@ class ChartingState extends MusicBeatState
 		});
 
 		////
-		final eventsFileDialog = new FileDialog();
-		eventsFileDialog.onOpen.add(function(resource) {
+		function onOpenEvents(resource) {
 			var data:Dynamic = Json.parse((resource:Bytes).toString());
 
 			var song:SwagSong = Reflect.field(data, "song"); 
@@ -836,11 +852,11 @@ class ChartingState extends MusicBeatState
 
 			_song.events = events;
 			updateGrid();
-		});
+		}
 
-		var loadEventJson:FlxButton = new FlxButton(loadAutosaveBtn.x, loadAutosaveBtn.y + 30, 'Load Events', function() {
-			final openEvents:Void->Void = eventsFileDialog.open.bind('json', getSongPath('events.json'), 'Load Events');
-			openSubState(new Prompt('This action will clear the current events.\n\nProceed?', 0, openEvents, null, options.ignoreWarnings));
+		var loadEventJson:FlxButton = new FlxButton(loadAutosaveBtn.x, loadAutosaveBtn.y + 30, 'Open Events', function() {
+			final openEvents:Void->Void = CoolUtil.showOpenDialog.bind('Open Events', getSongPath('events.json'), ['*.json'], onOpenEvents);
+			showWarning('This action will clear the current events.\n\nProceed?', openEvents);
 		});
 
 		var saveEventJson:FlxButton = new FlxButton(110, saveButton.y + 30, 'Save Events', function() {
@@ -849,24 +865,24 @@ class ChartingState extends MusicBeatState
 
 			var json = {"song": {"events": _song.events}}
 			var data:String = Json.stringify(json, "\t");
-			eventsFileDialog.save(data, 'json', getSongPath('events.json'), 'Save Events');
+			CoolUtil.showSaveDialog(data, 'Save Events', getSongPath('events.json'), ["JSON file", '*.json']);
 		});
 
-		var fix_oob_notes:FlxButton = new FlxButton(loadAutosaveBtn.x, 300 - 40, 'Fix Notes', function() {
-			openSubState(new Prompt('This action will fix notes that are outside of their corresponding section.\n\nProceed?', 0, fixOOBNotes, null, options.ignoreWarnings));
+		////
+		var editTracksButton:FlxButton = new FlxButton(loadAutosaveBtn.x, loadEventJson.y + 40, 'Edit Tracks', function() {
+			UI_box.selected_tab_id = "Tracks";
 		});
+
+		////
+		var fix_oob_notes:FlxButton = new FlxButton(loadAutosaveBtn.x, 300 - 40, 'Fix Notes', showWarning.bind('This action will fix notes that are outside of their corresponding section.\n\nProceed?', fixOOBNotes));
 		fix_oob_notes.color = FlxColor.PINK;
 		fix_oob_notes.label.color = FlxColor.WHITE;
 
-		var clear_events:FlxButton = new FlxButton(loadAutosaveBtn.x, 300, 'Clear events', function() {
-			openSubState(new Prompt('Clear notes?\n\nThis action cannot be undone.', 0, clearEvents, null, options.ignoreWarnings));
-		});
+		var clear_events:FlxButton = new FlxButton(loadAutosaveBtn.x, 300, 'Clear events', showWarning.bind('Clear notes?\n\nThis action cannot be undone.', clearEvents));
 		clear_events.color = FlxColor.RED;
 		clear_events.label.color = FlxColor.WHITE;
 
-		var clear_notes:FlxButton = new FlxButton(clear_events.x, clear_events.y + 30, 'Clear notes', function() {
-			openSubState(new Prompt('Clear events?\n\nThis action cannot be undone.', 0, clearNotes, null, options.ignoreWarnings));
-		});
+		var clear_notes:FlxButton = new FlxButton(clear_events.x, clear_events.y + 30, 'Clear notes', showWarning.bind('Clear events?\n\nThis action cannot be undone.', clearNotes));
 		clear_notes.color = FlxColor.RED;
 		clear_notes.label.color = FlxColor.WHITE;
 
@@ -998,6 +1014,7 @@ class ChartingState extends MusicBeatState
 		tab_group_song.add(clear_notes);
 		tab_group_song.add(saveButton);
 		tab_group_song.add(saveEventJson);
+		tab_group_song.add(editTracksButton);
 
 		tab_group_song.add(reloadSongJson);
 		tab_group_song.add(loadAutosaveBtn);
@@ -1616,8 +1633,10 @@ class ChartingState extends MusicBeatState
 	}
 
 	function getSongPath(file:String = "") {
-		var chartPath = Reflect.field(_song, "_path");
-		return (chartPath==null ? "" : Path.addTrailingSlash(Path.directory(chartPath))) + file;
+		var path = Reflect.field(_song, "_path");
+		path = path==null ? file : Path.addTrailingSlash(Path.directory(path)) + file;
+		trace(path);
+		return path;
 	}
 
 	function addMetadataUI() {
@@ -1693,7 +1712,7 @@ class ChartingState extends MusicBeatState
 		tab_group.add(loadButton);
 		tab_group.add(saveButton);
 
-		tab_group.add(new FlxText(10, saveButton.y + 30, UI_box.width - 20, 'NOTE: Metadata is saved and loaded as a separate file, it is not included in the chart file!'));
+		tab_group.add(new FlxText(10, saveButton.y + 30, UI_box.width - 20, 'NOTE: Metadata is saved and loaded as a separate file, it will not be included in the saved chart file!'));
 
 		UI_box.addGroup(tab_group);
 	}
@@ -1834,6 +1853,43 @@ class ChartingState extends MusicBeatState
 		UI_box.addGroup(tab_group_chart);
 	}
 
+	function addTracksUI() {
+		var tab_group_tracks = new FlxUI(null, UI_box);
+		tab_group_tracks.name = 'Tracks';
+
+		var instInput = new FlxUIInputText(10, 30, 200, _song.tracks.inst.join(','));
+		instInput.name = "tracks_inst";
+
+		var playInput = new FlxUIInputText(10, 60, 200, _song.tracks.player.join(','));
+		playInput.name = "tracks_player";
+		
+		var oppInput = new FlxUIInputText(10, 90, 200, _song.tracks.opponent.join(','));
+		oppInput.name = "tracks_opponent";
+
+		var reloadButton = new FlxButton(10, 120, "Reload Audio", function() {
+			loadTracks();
+
+			var trackNamesArray = ["None"];
+			for (trackName in soundTracksMap.keys())
+				trackNamesArray.push(trackName);
+
+			waveformTrackDropDown.setData(FlxUIDropDownMenu.makeStrIdLabelArray(trackNamesArray, false));
+			
+			selectTrack(_session.selectedTrack);
+		});
+
+		tab_group_tracks.add(new FlxText(10, instInput.y - 15, 0, 'Instrumental Tracks'));
+		tab_group_tracks.add(instInput);
+		tab_group_tracks.add(new FlxText(10, playInput.y - 15, 0, 'Player Tracks'));
+		tab_group_tracks.add(playInput);
+		tab_group_tracks.add(new FlxText(10, oppInput.y - 15, 0, 'Opponent Tracks'));
+		tab_group_tracks.add(oppInput);
+		tab_group_tracks.add(reloadButton);
+		tab_group_tracks.add(new FlxText(10, reloadButton.y + 45, 0, 'Separate multiple tracks with a comma\nEx: "Voices1,Voices2"'));
+		
+		UI_box.addGroup(tab_group_tracks);
+	}
+
 	var tracksCompleted:Bool = false;
 
 	function loadTracks():Void
@@ -1842,6 +1898,9 @@ class ChartingState extends MusicBeatState
 
 		var songTrackNames:Array<String> = [];
 		var jsonTracks = _song.tracks;
+
+		soundTracksMap.clear();
+		tracks.resize(0);
 
 		for (groupName in Reflect.fields(jsonTracks)) {
 			var trackGroup:Array<String> = Reflect.field(jsonTracks, groupName);
@@ -1997,6 +2056,13 @@ class ChartingState extends MusicBeatState
 					_song.metadata.charter = sender.text;
 				case 'metadata_modcharter':
 					_song.metadata.modcharter = sender.text;
+				
+				case 'tracks_inst':
+					_song.tracks.inst = sender.text.split(',');
+				case 'tracks_player':
+					_song.tracks.player = sender.text.split(',');
+				case 'tracks_opponent':
+					_song.tracks.opponent = sender.text.split(',');
 			}	
 		}
 		else if (id == FlxUISlider.CHANGE_EVENT)
@@ -2551,11 +2617,13 @@ class ChartingState extends MusicBeatState
 			LoadingState.loadAndSwitchState(new PlayState());
 		}
 		else if (FlxG.keys.justPressed.ESCAPE) {
-			PlayState.chartingMode = false;
-			MusicBeatState.switchState(new funkin.states.editors.MasterEditorMenu());
-			MusicBeatState.playMenuMusic(true);
-
-			FlxG.mouse.visible = false;
+			openSubState(new Prompt('Go back to the menus?\n\nUnsaved progress will be lost', 0, function() {
+				PlayState.chartingMode = false;
+				MusicBeatState.switchState(new funkin.states.editors.MasterEditorMenu());
+				MusicBeatState.playMenuMusic(true);
+	
+				FlxG.mouse.visible = false;
+			}, null, options.ignoreWarnings));
 		}
 	}
 
@@ -3412,7 +3480,7 @@ class ChartingState extends MusicBeatState
 		var charts:Array<String> = song.getCharts();
 
 		if (charts.length == 0) {
-			openSubState(new Prompt('No charts found for $song', 0, null, null, false, "OK", "OK"));
+			showPopup('No charts found for $song');
 			return;
 		}
 
@@ -3421,7 +3489,7 @@ class ChartingState extends MusicBeatState
 		trace(song, chartId);
 
 		if (daJson == null){
-			openSubState(new Prompt('An error ocurred while loading the JSON file', 0, null, null, false, "OK", "OK"));
+			showPopup('An error ocurred while loading the JSON file');
 		}else{
 			PlayState.song = song;
 			PlayState.SONG = daJson;
@@ -3459,7 +3527,7 @@ class ChartingState extends MusicBeatState
 
 		if ((data != null) && (data.length > 0))
 		{
-			CoolUtil.showSaveDialog(data.trim(), "Save Chart", Path.join([Sys.getCwd(), getSongPath(fileName)]), ["*.json"], onSaveComplete, onSaveCancel);
+			CoolUtil.showSaveDialog(data.trim(), "Save Chart", getSongPath(fileName), ["JSON file", "*.json"], onSaveComplete, onSaveCancel);
 		}
 	}
 
