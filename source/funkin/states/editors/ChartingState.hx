@@ -188,7 +188,7 @@ class ChartingState extends MusicBeatState
 	var strumLine:FlxSprite;
 	var quant:AttachedSprite;
 	var strumLineNotes:FlxTypedGroup<StrumNote>;
-	var curSong:String = 'Test';
+	var curSong:String = 'test';
 	var curSec:Int = 0;
 	var amountSteps:Int = 0;
 
@@ -239,6 +239,7 @@ class ChartingState extends MusicBeatState
 	var iconBG:FlxSprite;
 	var leftIcon:HealthIcon;
 	var rightIcon:HealthIcon;
+	var focusArrow:FlxSprite;
 
 	var value1InputText:FlxUIInputText;
 	var value2InputText:FlxUIInputText;
@@ -334,8 +335,6 @@ class ChartingState extends MusicBeatState
 			while (section.sectionNotes.length > 0) {
 				var note = section.sectionNotes.pop();
 				note.strumTime = fuckFloatingPoints(note.strumTime);
-				if (!section.mustHitSection)
-					note.column = (note.column + _song.keyCount) % (_song.keyCount * 2);
 				allNotes.push(note);
 			}
 			
@@ -358,8 +357,6 @@ class ChartingState extends MusicBeatState
 			}
 
 			var section = allSections[curSection];
-			if (!section.mustHitSection)
-				note.column = (note.column + _song.keyCount) % (_song.keyCount * 2);
 
 			section.sectionNotes.push(note); 
 		}
@@ -415,7 +412,7 @@ class ChartingState extends MusicBeatState
 
 		data ??= PlayState.SONG;
 		this._song = data ?? {
-			song: 'Test',
+			song: 'test',
 			bpm: 150.0,
 			speed: 1,
 			offset: 0,
@@ -530,7 +527,7 @@ class ChartingState extends MusicBeatState
 
 		FlxG.camera.follow(camPos);
 
-		quant = new AttachedSprite('chart_quant','chart_quant');
+		quant = new AttachedSprite('charteditor/chart_quant','charteditor/chart_quant');
 		quant.animation.addByPrefix('q','chart_quant',0,false);
 		quant.animation.play('q', true, false, 0);
 		quant.sprTracker = strumLine;
@@ -559,7 +556,7 @@ class ChartingState extends MusicBeatState
 		iconBG.scrollFactor.set(0, 0);
 		add(iconBG);
 
-		var eventIcon:FlxSprite = new FlxSprite(GRID_SIZE * 0.5 - 30 * 0.5, (55 - 30) * 0.5, Paths.image('eventArrow'));
+		var eventIcon:FlxSprite = new FlxSprite(GRID_SIZE * 0.5 - 30 * 0.5, (55 - 30) * 0.5, Paths.image('charteditor/eventArrow'));
 		eventIcon.scrollFactor.set(1, 0);
 		eventIcon.setGraphicSize(30, 30);
 		eventIcon.updateHitbox();
@@ -576,6 +573,13 @@ class ChartingState extends MusicBeatState
 		rightIcon.setGraphicSize(0, 45);
 		rightIcon.updateHitbox();
 		add(rightIcon);
+
+		focusArrow = new FlxSprite(Paths.image('optionsMenu/arrow'));
+		focusArrow.scrollFactor.set(1, 0);
+		focusArrow.scale.set(.6, .6);
+		focusArrow.updateHitbox();
+		focusArrow.flipY = true;
+		add(focusArrow);
 
 		////
 		var text =
@@ -808,11 +812,11 @@ class ChartingState extends MusicBeatState
 
 	function addSongUI():Void
 	{
-		var UI_songTitle = new FlxUIInputText(10, 10, 70, _song.song, 8);
-		UI_songTitle.name = 'song_title';
+		var UI_songTitle = new FlxUIInputText(10, 20, 70, _song.song, 8);
+		UI_songTitle.name = 'song_songId';
 		blockPressWhileTypingOn.push(UI_songTitle);
 
-		var saveButton:FlxButton = new FlxButton(110, 8, "Save Chart", saveLevel);
+		var saveButton:FlxButton = new FlxButton(110, 20, "Save Chart", saveLevel);
 
 		var reloadSongJson:FlxButton = new FlxButton(saveButton.x + 90, saveButton.y, "Reload JSON", function()
 		{
@@ -931,9 +935,9 @@ class ChartingState extends MusicBeatState
 		ddCharacters[0].label = "<null>";
 		characters[0] = null;
 
-		var daY = stepperKeyCount.y;
+		var daY = stepperKeyCount.y + 35;
 
-		var player1DropDown = new CustomFlxUIDropDownMenu(10, daY + 45, ddCharacters, function(character:String)
+		var player1DropDown = new CustomFlxUIDropDownMenu(10, daY, ddCharacters, function(character:String)
 		{
 			_song.player1 = characters[Std.parseInt(character)];
 			updateHeads();
@@ -993,17 +997,13 @@ class ChartingState extends MusicBeatState
 		var splashSkin = _song.splashSkin;
 		if (splashSkin == null) splashSkin = '';
 
-		var noteSkinInputText = new FlxUIInputText(player2DropDown.x, player2DropDown.y + 50, 150, arrowSkin, 8);
+		var noteSkinInputText = new FlxUIInputText(player2DropDown.x, player2DropDown.y + 40, 150, arrowSkin, 8);
+		noteSkinInputText.name = 'song_arrowSkin';
 		blockPressWhileTypingOn.push(noteSkinInputText);
 
 		var noteSplashesInputText = new FlxUIInputText(noteSkinInputText.x, noteSkinInputText.y + 35, 150, splashSkin, 8);
 		noteSplashesInputText.name = 'song_noteSplashes';
 		blockPressWhileTypingOn.push(noteSplashesInputText);
-
-		var reloadNotesButton:FlxButton = new FlxButton(noteSplashesInputText.x + 5, noteSplashesInputText.y + 20, 'Change Notes', function() {
-			_song.arrowSkin = noteSkinInputText.text;
-			updateGrid();
-		});
 		
 		var tab_group_song = new FlxUI(null, UI_box);
 		tab_group_song.name = "Song";
@@ -1022,11 +1022,12 @@ class ChartingState extends MusicBeatState
 		tab_group_song.add(stepperSpeed);
 		tab_group_song.add(stepperBPM);
 		tab_group_song.add(stepperKeyCount);
-		tab_group_song.add(reloadNotesButton);
 		tab_group_song.add(noteSkinInputText);
 		tab_group_song.add(noteSplashesInputText);
 
-		tab_group_song.add(new FlxText(stepperSpeed.x, stepperSpeed.y - 15, 0, 'Song Speed:'));
+		tab_group_song.add(new FlxText(UI_songTitle.x, UI_songTitle.y - 15, 0, 'Song ID:'));
+
+		tab_group_song.add(new FlxText(stepperSpeed.x, stepperSpeed.y - 15, 0, 'Note Speed:'));
 		tab_group_song.add(new FlxText(stepperBPM.x, stepperBPM.y - 15, 0, 'Song BPM:'));
 		tab_group_song.add(new FlxText(stepperKeyCount.x, stepperKeyCount.y - 15, 0, 'Key Count:'));
 
@@ -1645,23 +1646,23 @@ class ChartingState extends MusicBeatState
 
 		var songNameInputText = new FlxUIInputText(10, 30, 180, _song.metadata.songName);
 		songNameInputText.name = "metadata_songName";
-		tab_group.add(songNameInputText);
 		blockPressWhileTypingOn.push(songNameInputText);
 
 		var artistInputText = new FlxUIInputText(10, songNameInputText.y + 30, 180, _song.metadata.artist);
 		artistInputText.name = "metadata_artist";
-		tab_group.add(artistInputText);
 		blockPressWhileTypingOn.push(artistInputText);
 
 		var charterInputText = new FlxUIInputText(10, artistInputText.y + 30, 180, _song.metadata.charter);
 		charterInputText.name = "metadata_charter";
-		tab_group.add(charterInputText);
 		blockPressWhileTypingOn.push(charterInputText);
 
 		var modcharterInputText = new FlxUIInputText(10, charterInputText.y + 30, 180, _song.metadata.modcharter);
 		modcharterInputText.name = "metadata_modcharter";
-		tab_group.add(modcharterInputText);
 		blockPressWhileTypingOn.push(modcharterInputText);
+
+		var extraInfoInputText = new FlxUIInputText(10, modcharterInputText.y + 30, 180, (_song.metadata.extraInfo?.join(',') ?? ""));
+		extraInfoInputText.name = "metadata_extraInfo";
+		blockPressWhileTypingOn.push(extraInfoInputText);
 
 		////
 		// TODO: freeplay data shit idunno
@@ -1679,10 +1680,11 @@ class ChartingState extends MusicBeatState
 				artistInputText.text = data.artist;
 				charterInputText.text = data.charter;
 				modcharterInputText.text = data.modcharter;	
+				extraInfoInputText.text = (data.extraInfo?.join(',') ?? "");
 			}
 		});
 
-		var loadButton = new FlxButton(10, modcharterInputText.y + 30, "Load Metadata", function() {			
+		var loadButton = new FlxButton(10, extraInfoInputText.y + 30, "Load Metadata", function() {			
 			fileDialog.open('json', getSongPath("metadata.json"), 'Load Metadata');
 		});
 
@@ -1693,6 +1695,7 @@ class ChartingState extends MusicBeatState
 			_song.metadata.artist = artistInputText.text;
 			_song.metadata.charter = charterInputText.text;
 			_song.metadata.modcharter = modcharterInputText.text;
+			_song.metadata.extraInfo = extraInfoInputText.text.split(',');
 
 			var data:String = Json.stringify(_song.metadata, "\t");
 			fileDialog.save(data, 'json', getSongPath("metadata.json"), 'Save Metadata');
@@ -1703,11 +1706,13 @@ class ChartingState extends MusicBeatState
 		tab_group.add(new FlxText(artistInputText.x, artistInputText.y - 15, 0, 'Artist:'));
 		tab_group.add(new FlxText(charterInputText.x, charterInputText.y - 15, 0, 'Charter:'));
 		tab_group.add(new FlxText(modcharterInputText.x, modcharterInputText.y - 15, 0, 'Modcharter:'));
+		tab_group.add(new FlxText(extraInfoInputText.x, extraInfoInputText.y - 15, 0, 'Extra Info:'));
 		
 		tab_group.add(songNameInputText);
 		tab_group.add(artistInputText);
 		tab_group.add(charterInputText);
 		tab_group.add(modcharterInputText);
+		tab_group.add(extraInfoInputText);
 
 		tab_group.add(loadButton);
 		tab_group.add(saveButton);
@@ -2029,8 +2034,11 @@ class ChartingState extends MusicBeatState
 		else if(id == FlxUIInputText.CHANGE_EVENT) {
 			var sender:FlxUIInputText = cast sender;
 			switch (name) {
-				case 'song_title':
+				case 'song_songId':
 					_song.song = sender.text;
+
+				case 'song_arrowSkin':
+					_song.arrowSkin = sender.text;
 
 				case 'song_noteSplashes':
 					_song.splashSkin = sender.text;
@@ -2056,6 +2064,8 @@ class ChartingState extends MusicBeatState
 					_song.metadata.charter = sender.text;
 				case 'metadata_modcharter':
 					_song.metadata.modcharter = sender.text;
+				case 'metadata_extraInfo':
+					_song.metadata.extraInfo = sender.text.split(',');
 				
 				case 'tracks_inst':
 					_song.tracks.inst = sender.text.split(',');
@@ -2195,9 +2205,9 @@ class ChartingState extends MusicBeatState
 						&&	FlxG.mouse.y <	gridBG.y + gridBG.height;
 
 		if (onIcons && FlxG.mouse.justPressed) {
-			if (FlxG.mouse.overlaps(rightIcon)) {
+			var mhs = _song.notes[curSec].mustHitSection;
+			if (FlxG.mouse.overlaps(mhs ? rightIcon : leftIcon))
 				new ChangeMustHitSectionAction(curSec, true);
-			}
 		}
 
 		if (onGrid){
@@ -2978,18 +2988,11 @@ class ChartingState extends MusicBeatState
 		var healthIconP1:String ="bf";
 		var healthIconP2:String = "dad";
 
-		if (_song.notes[curSec].mustHitSection)
-		{
-			leftIcon.changeIcon(healthIconP1);
-			rightIcon.changeIcon(healthIconP2);
-			if (_song.notes[curSec].gfSection) leftIcon.changeIcon('gf');
-		}
-		else
-		{
-			leftIcon.changeIcon(healthIconP2);
-			rightIcon.changeIcon(healthIconP1);
-			if (_song.notes[curSec].gfSection) leftIcon.changeIcon('gf');
-		}
+		var focusIcon = (_song.notes[curSec].mustHitSection ? leftIcon : rightIcon);
+
+		leftIcon.changeIcon(healthIconP1);
+		rightIcon.changeIcon(healthIconP2);
+		if (_song.notes[curSec].gfSection) focusIcon.changeIcon('gf');
 
 		leftIcon.setGraphicSize(0, 45);
 		leftIcon.updateHitbox();
@@ -2998,6 +3001,9 @@ class ChartingState extends MusicBeatState
 
 		leftIcon.setPosition(GRID_SIZE * (1 + _song.keyCount * 0.5) - leftIcon.width * 0.5, 5);
 		rightIcon.setPosition(GRID_SIZE * (1 + _song.keyCount * 1.5) - rightIcon.width * 0.5, 5);
+
+		SpriteTools.objectCenter(focusArrow, focusIcon, X);
+		focusArrow.y = focusIcon.y + focusIcon.height;
 	}
 
 	function updateNoteSteps():Void
@@ -3226,8 +3232,6 @@ class ChartingState extends MusicBeatState
 	}
 
 	inline function getNoteX(column:Int, sectionNumber:Int):Float {
-		if (_song.notes[curSec].mustHitSection != _song.notes[sectionNumber].mustHitSection)
-			(column < _song.keyCount) ? (column += _song.keyCount) : (column -= _song.keyCount);
 		return (1 + column) * GRID_SIZE;
 	}
 
@@ -3240,7 +3244,7 @@ class ChartingState extends MusicBeatState
 		note.chartData = i;
 		note.usesDefaultColours = false;
 
-		note.loadGraphic(Paths.image('eventArrow'));
+		note.loadGraphic(Paths.image('charteditor/eventArrow'));
 		note.eventName = getEventName(i.subEventsData);
 		note.eventLength = i.subEventsData.length;
 		if (i.subEventsData.length < 2)
@@ -3521,6 +3525,8 @@ class ChartingState extends MusicBeatState
 		}else {
 			fileName = _song.song + ".json";
 		}
+
+		Reflect.setField(_song, "trollEngine", funkin.data.ChartData.ChartVersion.CURRENT);
 
 		var json = {"song": _song};
 		var data:String = Json.stringify(json, "\t");
