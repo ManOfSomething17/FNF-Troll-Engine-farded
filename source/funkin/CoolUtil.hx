@@ -281,24 +281,10 @@ class CoolUtil {
 		#end
 	}
 
-    public static function createMissingDirectories(path:String):String {
-		#if sys
-		var folders:Array<String> = path.split("/");
-		var currentPath:String = "";
-
-		for (folder in folders) {
-			currentPath += folder + "/";
-			if (!FileSystem.exists(currentPath))
-				FileSystem.createDirectory(currentPath);
-		}
-		#end
-		return path;
-	}
-
 	public static function safeSaveFile(path:String, content:OneOfTwo<String, Bytes>):Bool {
 		#if sys
 		try {
-			createMissingDirectories(Path.directory(path));
+			FileSystem.createDirectory(Path.directory(path));
 			if (content is Bytes)
 				File.saveBytes(path, content);
 			else
@@ -312,14 +298,6 @@ class CoolUtil {
 		#end
 
 		return false;
-	}
-
-	public static function getFileBytes(absolutePath:String) {
-		var cwd = Sys.getCwd();
-		Sys.setCwd('');
-		var b = Paths.getBytes(absolutePath);
-		Sys.setCwd(cwd);
-		return b;
 	}
 
 	@:noCompletion
@@ -338,13 +316,22 @@ class CoolUtil {
 		#end
 	}
 
-	@:noCompletion
-	private static inline function fileDialogPath(?path:String):String {
+	/**
+		Normalize a path to be used by the the file system.
+
+		On Windows, slashes `/` are replaced by backslashes `\`
+		
+		If `path` is `null`, or if the resulting path doesn't exist, the current working directory is returned.
+
+		@param path File path, can be relative or absolute.
+		@return An absolute path to be used in system functions.
+	**/
+	public static inline function getSystemPath(?path:String):String {
 		#if sys
 		if (path == null || path.length == 0)
 			return Sys.getCwd();
 		if (!Path.isAbsolute(path))
-			path = Path.join([Sys.getCwd(), path]);
+			path = Path.normalize(Path.addTrailingSlash(Sys.getCwd()) + path);
 		
 		if (!FileSystem.exists(Path.directory(path)))
 			path = Sys.getCwd();
@@ -360,7 +347,7 @@ class CoolUtil {
 
 	public static function showOpenMultipleDialog(title:String = "Open Files", ?defaultPath:String, ?filters:Array<String>, ?onSelect:(paths:Array<String>)->Void, ?onCancel:Void->Void):Void {
 		final filters = _filefilters(filters);
-		final defaultPath = fileDialogPath(defaultPath);
+		final defaultPath = getSystemPath(defaultPath);
 		#if linc_filedialogs
 		final files:Array<String> = FileDialogs.open_file(title, cast defaultPath, cast filters, Option.Multiselect);
 		if (files.length == 0) {
@@ -372,35 +359,35 @@ class CoolUtil {
 		final dialog:FileDialog = new FileDialog();
 		if (onCancel != null) dialog.onCancel.add(onCancel);
 		if (onSelect != null) dialog.onSelectMultiple.add(onSelect);
-		dialog.browse(OPEN_MULTIPLE, filter, defaultPath, title);
+		dialog.browse(OPEN_MULTIPLE, filters, defaultPath, title);
 		Sys.sleep(0.5); // sleep to prevent dialogs sometimes not opening if opened in quick succession
 		#end
 	}
 	
 	public static function showOpenDialog(title:String = "Open File", ?defaultPath:String, ?filters:Array<String>, ?onOpen:(bytes:Bytes)->Void, ?onSelect:(path:String)->Void, ?onCancel:Void->Void):Void {
 		final filters = _filefilters(filters);
-		final defaultPath = fileDialogPath(defaultPath);
+		final defaultPath = getSystemPath(defaultPath);
 		#if linc_filedialogs
 		final files:Array<String> = FileDialogs.open_file(title, cast defaultPath, cast filters, Option.None);
 		if (onSelect != null) onSelect(files[0]);
 		if (files.length == 0) {
 			if (onCancel != null) onCancel();
 		}else {
-			if (onOpen != null) onOpen(getFileBytes(files[0]));
+			if (onOpen != null) onOpen(File.getBytes(files[0]));
 		}
 		#else
 		final dialog:FileDialog = new FileDialog();
 		if (onOpen != null) dialog.onOpen.add(onOpen);
 		if (onCancel != null) dialog.onCancel.add(onCancel);
 		if (onSelect != null) dialog.onSelect.add(onSelect);
-		dialog.browse(OPEN, filter, defaultPath, title);
+		dialog.browse(OPEN, filters, defaultPath, title);
 		Sys.sleep(0.5); // sleep to prevent dialogs sometimes not opening if opened in quick succession
 		#end
 	}
 
 	public static function showSaveDialog(content:OneOfTwo<String, Bytes>, title:String = "Save File", ?defaultPath:String, ?filters:Array<String>, ?onSave:(path:String)->Void, ?onCancel:Void->Void):Void {
 		final filters = _filefilters(filters);
-		final defaultPath = fileDialogPath(defaultPath);
+		final defaultPath = getSystemPath(defaultPath);
 		#if linc_filedialogs
 		final savePath:String = FileDialogs.save_file(title, cast defaultPath, cast filters);
 		if (savePath.length == 0) {
@@ -413,8 +400,8 @@ class CoolUtil {
 		final dialog:FileDialog = new FileDialog();
 		dialog.onSelect.add((f) -> safeSaveFile(f, content));
 		if (onCancel != null) dialog.onCancel.add(onCancel);
-		if (onSelect != null) dialog.onCancel.add(onSelect);
-		dialog.browse(SAVE, filter, defaultPath, title);
+		if (onSave != null) dialog.onSelect.add(onSave);
+		dialog.browse(SAVE, filters, defaultPath, title);
 		Sys.sleep(0.5); // sleep to prevent dialogs sometimes not opening if opened in quick succession
 		#end
 	}

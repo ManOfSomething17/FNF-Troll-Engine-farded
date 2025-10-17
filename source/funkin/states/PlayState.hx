@@ -159,7 +159,7 @@ class PlayState extends MusicBeatState
 		PlayState.songPlaylistIdx = 0;	
 	}
 
-	private static function loadSong(song:BaseSong, chartId:String) {
+	public static function loadSong(song:BaseSong, chartId:String) {
 		Paths.currentModDirectory = song.folder;
 		PlayState.song = song;
 		PlayState.SONG = song.getSwagSong(chartId);
@@ -980,7 +980,12 @@ class PlayState extends MusicBeatState
 
 		#if DISCORD_ALLOWED
 		// Discord RPC texts
-		stateText = '${displayedSong} [$displayedDifficulty]';
+		stateText = displayedSong;
+		var charts = (song==null) ? null : song.getCharts(); 
+		if (charts != null && charts.length > 1)
+			stateText += ' [$displayedDifficulty]';
+		else if (metadata?.artist != null && metadata.artist.length > 0)
+			stateText += ' - ${metadata.artist}';
 		
 		detailsText = chartingMode ? "Charting Mode" : isStoryMode ? "Story Mode" : "Freeplay";
 		detailsPausedText = "Paused - " + detailsText;
@@ -1639,6 +1644,10 @@ class PlayState extends MusicBeatState
 			else
 				Paths.track(songId, trackName);
 		}
+
+		if (sndAsset == null)
+			trace('WARNING: Failed to load track $trackName');
+
 		var newTrack = new FlxSound().loadEmbedded(sndAsset);
 		//newTrack.volume = 0.0;
 		newTrack.pitch = playbackRate;
@@ -2108,10 +2117,9 @@ class PlayState extends MusicBeatState
 		trace("changed " + options);
 				
 		if (options.contains("gradeSet")) {
-			ratingStuff = Highscore.grades.get(ClientPrefs.gradeSet);
-			stats.useFlags = ClientPrefs.gradeSet == 'Etterna';
 			// stats.accuracySystem = ClientPrefs.accuracyCalc;
-			stats.gradeSet = ratingStuff;
+			stats.gradeSet = ratingStuff = Highscore.grades.get(ClientPrefs.gradeSet);
+			stats.useFlags = ClientPrefs.gradeSet == 'Etterna';
 			stats.updateVariables();
 		}
 
