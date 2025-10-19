@@ -266,7 +266,6 @@ class PlayState extends MusicBeatState
 
 	public var stats:Stats;
 	public var noteHits:Array<Float> = [];
-	public var nps:Int = 0;
 	
 	public var trackMap = new Map<String, FlxSound>();
 	public var tracks:Array<FlxSound> = [];
@@ -448,6 +447,7 @@ class PlayState extends MusicBeatState
 	public var ratingPercent(get, set):Float;
 	public var ratingFC(get, set):String;
 	public var ratingStuff(get, set):Array<Array<Dynamic>>;
+	public var nps(get, set):Int;
 	
 	@:noCompletion inline function get_songScore() return stats.score;
 	@:noCompletion inline function get_totalPlayed()return stats.totalPlayed;
@@ -458,6 +458,7 @@ class PlayState extends MusicBeatState
 	@:noCompletion inline function get_ratingPercent()return stats.ratingPercent;
 	@:noCompletion inline function get_ratingFC()return stats.clearType;
 	@:noCompletion inline function get_ratingStuff() return stats.gradeSet;
+	@:noCompletion inline function get_nps()return stats.nps;
 
 	@:noCompletion inline function set_songScore(val:Int)return stats.score = val;
 	@:noCompletion inline function set_totalPlayed(val:Float)return stats.totalPlayed = val;
@@ -468,6 +469,7 @@ class PlayState extends MusicBeatState
 	@:noCompletion inline function set_ratingPercent(val:Float)return stats.ratingPercent = val;
 	@:noCompletion inline function set_ratingFC(val:String)return stats.clearType = val;
 	@:noCompletion inline function set_ratingStuff(val) return stats.gradeSet = val;
+	@:noCompletion inline function set_nps(val:Int)return stats.nps = val;
 
 	#if DISCORD_ALLOWED
 	// Discord RPC variables
@@ -576,8 +578,7 @@ class PlayState extends MusicBeatState
 
 		Paths.getAllStrings();
 		
-		stats = new Stats(ClientPrefs.accuracyCalc, Highscore.grades.get(ClientPrefs.gradeSet));
-		stats.useFlags = ClientPrefs.gradeSet == 'Etterna';
+		stats = new Stats(ClientPrefs.accuracyCalc, ClientPrefs.gradeSet);
 
 		judgeManager = new JudgmentManager(ClientPrefs.useEpics);
 		judgeManager.judgeTimescale = Wife3.timeScale;
@@ -1010,11 +1011,8 @@ class PlayState extends MusicBeatState
 		add(luaDebugGroup);
 
 		#if FUNNY_ALLOWED
-		fish = new Fish();
+		fish = new Fish(this);
 		fish.cameras = [camOther];
-		fish.screenCenter();
-		fish.alpha = 0;
-		fish.exists = ClientPrefs.fish;
 		add(fish);
 		#end
 
@@ -2107,20 +2105,12 @@ class PlayState extends MusicBeatState
 		if (options.length < 1)
 			return;
 
-		#if FUNNY_ALLOWED
-		if (!fish.exists) fish.alpha = 0;
-		fish.exists = ClientPrefs.fish;
-		#end
-
 		this.songSyncMode = SongSyncMode.fromString(ClientPrefs.songSyncMode);
 		
 		trace("changed " + options);
 				
 		if (options.contains("gradeSet")) {
-			// stats.accuracySystem = ClientPrefs.accuracyCalc;
-			stats.gradeSet = Highscore.grades.get(ClientPrefs.gradeSet);
-			stats.useFlags = ClientPrefs.gradeSet == 'Etterna';
-			stats.updateVariables();
+			stats.setGradeSet(ClientPrefs.gradeSet);
 		}
 
 		if (!ClientPrefs.coloredCombos)
@@ -2171,6 +2161,8 @@ class PlayState extends MusicBeatState
 				}
 			}
 		}
+
+		signals.optionsChanged.dispatch(options);
 
 		callOnScripts('optionsChanged', [options]);
 		if (hudSkinScript != null)
@@ -2508,14 +2500,6 @@ class PlayState extends MusicBeatState
 		for (script in eventScripts)
 			script.call("update", [elapsed]);
 
-		#if FUNNY_ALLOWED
-		// Only the worthy may see the fish.
-		if (stats.ratingPercent >= 1)
-			fish.alpha += elapsed;
-		else
-			fish.alpha -= elapsed;
-		#end
-
 		callOnHScripts('update', [elapsed]);
 
 		var lerpVal = Math.exp(-elapsed * 3.125 * camZoomingDecay);
@@ -2540,7 +2524,7 @@ class PlayState extends MusicBeatState
 				noteHits.shift();
 		}
 
-		stats.nps = nps = Math.floor(noteHits.length / 2);
+		nps = Math.floor(noteHits.length / 2);
 		FlxG.watch.addQuick("notes per second", nps);
 		if (stats.npsPeak < nps)
 			stats.npsPeak = nps;
@@ -4380,6 +4364,8 @@ class PlayStateSignals /*extends MusicBeatSignals*/
 	
 	public var noteMiss = new FlxTypedSignal<(Note, PlayField) -> Void>();
 	public var noteMissPress = new FlxTypedSignal<(Note, PlayField) -> Void>();
+
+	public var optionsChanged = new FlxTypedSignal<Array<String> -> Void>();
 
 	public var onPause = new FlxTypedSignal<Void -> Void>();
 	public var onResume = new FlxTypedSignal<Void -> Void>();
