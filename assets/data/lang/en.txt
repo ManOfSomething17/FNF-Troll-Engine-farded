@@ -3,6 +3,40 @@
 ## Alternatively, you can do a pull request! You can also do a pull request if you want to add other languages, too!
 ## Comments are defined with ## or //
 
+## Generic prompt/dialog response strings
+yes=Yes
+no=No
+accept=Accept
+deny=Deny
+ok=Ok
+cancel=Cancel
+close=Close
+skip=Skip
+retry=Retry
+tryAgain=Try again
+stop=Stop
+continue=Continue
+proceed=Proceed
+go=Go
+back=Back
+ignore=Ignore
+allow=Allow
+deny=Deny
+enable=Enable
+disable=Disable
+
+status_on=On
+status_off=Off
+status_disabled=Disabled
+status_enabled=Enabled
+
+playback_start=Start
+playback_pause=Pause
+playback_resume=Resume
+playback_stop=Stop
+playback_mute=Mute
+playback_unmute=Unmute
+
 ## Difficulty Names
 difficultyName_normal=Normal
 difficultyName_hard=Hard
@@ -58,8 +92,10 @@ peak=Peak
 combo=Combo
 peakcombo=Peak Combo
 botplayMark=[BOTPLAY]
-actionhint_gameplayModsMenu=Press {key} to open the Gameplay Modifiers menu
-actionhint_resetScore=Press {key} to reset a song's score
+## Freeplay
+action_openGameplayChangers=Gameplay Modifiers
+action_resetScore=Reset Score
+action_listenToSong=Listen to Song
 ## Options stuff
 opt_display_noteOffset=Offset
 opt_display_ratingOffset=Judgement Offset
@@ -264,6 +300,7 @@ gameplay_modifier_practice=Practice Mode
 gameplay_modifier_scrollspeed=Scroll Speed
 gameplay_modifier_scrolltype=Scroll Type
 gameplay_modifier_songspeed=Playback Rate
+##
 pauseoption_resume-song=Resume
 pauseoption_restart-song=Restart Song
 pauseoption_restart-week=Restart Week
@@ -271,9 +308,13 @@ pauseoption_change-difficulty=Change Difficulty
 pauseoption_change-modifiers=Change Modifiers
 pauseoption_change-options=Options
 pauseoption_exit-to-menu=Exit to menu
-##
+## Debug / Charting mode
 pauseoption_restart-from-last-time=Restart from last time
-pauseoption_skip-to=Skip to
+pauseoption_skip-to-time=Skip to
 pauseoption_end-song=End song
 pauseoption_leave-charting-mode=Leave charting mode
 pauseoption_toggle-botplay=Toggle botplay
+## Cutscene pause menu
+pauseoption_resume-cutscene=Resume
+pauseoption_skip-cutscene=Skip cutscene
+pauseoption_restart-cutscene=Restart cutscene

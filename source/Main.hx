@@ -2,9 +2,10 @@ package;
 
 import haxe.io.Path;
 import haxe.CallStack;
+import openfl.display.Bitmap;
 import openfl.display.Sprite;
 import openfl.display.FPS;
-import lime.app.Application;
+import lime.app.Application.current as application;
 import lime.graphics.Image;
 import flixel.FlxG;
 import flixel.FlxState;
@@ -13,7 +14,6 @@ import funkin.*;
 import funkin.api.Github;
 import funkin.macros.Sowy;
 import funkin.data.SemanticVersion;
-import funkin.objects.Bread;
 
 #if sys
 import sys.FileSystem;
@@ -57,9 +57,10 @@ class Main extends Sprite
 	public static var recentRelease:Release;
 
 	////
+	public static var instance:Main;
 	public static var game:FNFGame;
 	public static var fpsVar:FPS;
-	public static var bread:Bread;
+	public static var bread:Bitmap;
 
 	#if ALLOW_DEPRECATION
 	@:noCompletion @:deprecated("volumeChangedEvent is deprecated, use FlxG.sound.onVolumeChange, instead") 
@@ -88,6 +89,7 @@ class Main extends Sprite
 
 	public function new() {
 		super();
+		instance = this;
 
 		#if (windows && cpp)
 		funkin.api.Darkfriend.setDarkMode(!funkin.api.Darkfriend.isLightTheme());
@@ -97,6 +99,11 @@ class Main extends Sprite
 		stage.window.setIcon(Image.fromFile("icon.png"));
 		#end
 
+		#if hxvlc
+		hxvlc.util.Handle.init(["--no-audio-time-stretch"]); // Makes it so videos when slowed/sped up have their audio pitch up/down
+		// imo better than with time stretch but remove if thats what u prefer lol
+		#end
+				
 		////
 		#if sys
 		var args = Sys.args();
@@ -164,7 +171,7 @@ class Main extends Sprite
 		addChild(fpsVar);
 
 		#if FUNNY_ALLOWED
-		bread = new Bread();
+		bread = new Bitmap();
 		bread.visible = false;
 		addChild(bread);
 		#end
@@ -188,19 +195,19 @@ class Main extends Sprite
 	}
 
 	public static function resizeWindow(width:Int, height:Int)
-		Application.current.window.resize(width, height);
+		application.window.resize(width, height);
 
 	public static function centerWindow() {
-		Application.current.window.move(
-			Std.int((Application.current.window.display.bounds.width - Application.current.window.width) / 2),
-			Std.int((Application.current.window.display.bounds.height - Application.current.window.height) / 2)
+		application.window.move(
+			Std.int((application.window.display.bounds.width - application.window.width) / 2),
+			Std.int((application.window.display.bounds.height - application.window.height) / 2)
 		);
 	}
 
 	public static function scaleWindow(scale:Float) {
-		Application.current.window.resize(
-			Math.floor(Application.current.window.display.bounds.width * scale), 
-			Math.floor(Application.current.window.display.bounds.height * scale)
+		application.window.resize(
+			Math.floor(application.window.display.bounds.width * scale), 
+			Math.floor(application.window.display.bounds.height * scale)
 		);
 	}
 

@@ -21,7 +21,6 @@ class PauseSubState extends MusicBeatSubstate
 	public static var instance:PauseSubState = null;
 	public static var songName:Null<String> = null;
 
-	public var bg:FlxSprite;
 	public var menu:AlphabetMenu;
 
 	private var menuOptions:Array<PauseMenuOption>;
@@ -29,6 +28,12 @@ class PauseSubState extends MusicBeatSubstate
 	private var curOption:PauseMenuOption = null; 
 
 	private var allTexts:Array<FlxText>;
+
+	private var pauseMusic:Null<FlxSound>;
+
+	public function new(bgColor:Int = 0xFF000000) {
+		super(bgColor);
+	}
 
 	public function pushOption(opt) {
 		optionsMap.set(opt.id, opt);
@@ -66,15 +71,8 @@ class PauseSubState extends MusicBeatSubstate
 		newOption("resume-song", resumeSong);
 		newOption("restart-song", restartSong);
 
-		if (canChangeDifficulty())
-			newOption("change-difficulty", openDifficulties);
-		
-		if (!PlayState.isStoryMode)
-			newOption("change-modifiers", openModifiers);
-
-		newOption("change-options", openOptions);
-
-		if (#if debug true #else PlayState.chartingMode #end) {
+		final debug = #if debug true #else PlayState.chartingMode #end;
+		if (debug) {
 			////
 			if (game.startedOnTime > 0)
 				newOption('restart-from-last-time', restartFromLastTime);
@@ -93,6 +91,17 @@ class PauseSubState extends MusicBeatSubstate
 				opt.obj.set_text(getBotplayTxt());
 			};
 		}
+
+		if (canChangeDifficulty())
+			newOption("change-difficulty", openDifficulties);
+		
+		if (!PlayState.isStoryMode)
+			newOption("change-modifiers", openModifiers);
+
+		newOption("change-options", openOptions);
+
+		if (debug)
+			newOption('leave-charting-mode', leaveChartingModePrompt);
 
 		newOption('exit-to-menu', PlayState.gotoMenus);
 	}
@@ -129,12 +138,10 @@ class PauseSubState extends MusicBeatSubstate
 		var cam:FlxCamera = FlxG.cameras.list[FlxG.cameras.list.length - 1];
 		this.cameras = [cam];
 
-		bg = CoolUtil.blankSprite(FlxG.width, FlxG.height, 0xFF000000);
-		bg.scrollFactor.set();
-		bg.alpha = 0.0;
-		add(bg);
-
-		FlxTween.tween(bg, {alpha: 0.6}, 0.3, {ease: FlxEase.quartInOut});
+		@:privateAccess
+		_bgSprite._cameras = this._cameras;
+		_bgSprite.alpha = 0.0;
+		FlxTween.tween(_bgSprite, {alpha: 0.6}, 0.3, {ease: FlxEase.quartInOut});
 
 		menu = new AlphabetMenu();
 		menu.callbacks.onSelect = onSelectedOption;
@@ -224,19 +231,18 @@ class PauseSubState extends MusicBeatSubstate
 		}
 	}
 
-	private var pauseMusic:FlxSound;
 	private function playMusic(){
-		pauseMusic = null;
-		
-		var songName:String = songName ?? 'Breakfast';
-		if (songName == 'None') return;
-
-		songName = Paths.formatToSongPath(songName);
+		if (songName == null) {
+			pauseMusic = null;
+			return;
+		}
 
 		var md = MusicData.fromName(songName);
 		if (md != null) {
 			pauseMusic = md.makeFlxSound();
-		}else {
+		}
+		#if (true || ALLOW_DEPRECATION)
+		else {
 			var sndPath = Paths.soundPath("music", songName);
 			if (Paths.exists(sndPath)) {
 				var loopTimePath = new haxe.io.Path(sndPath);
@@ -255,11 +261,12 @@ class PauseSubState extends MusicBeatSubstate
 				FlxG.sound.list.add(pauseMusic);
 			}
 		}
+		#end
 
 		if (pauseMusic != null) {
 			pauseMusic.volume = 0;
 			pauseMusic.play(false, FlxG.random.int(0, Std.int(pauseMusic.length * 0.5)));
-			pauseMusic.fadeIn(50, 0, 0.5);
+			pauseMusic.fadeIn(5, 0, 0.75);
 		}else {
 			trace('Pause music not found: $songName');
 		}
@@ -273,7 +280,7 @@ class PauseSubState extends MusicBeatSubstate
 
 	override function destroy() {
 		if (instance == this) instance = null;
-		pauseMusic.destroy();
+		if (pauseMusic != null )pauseMusic.destroy();
 		super.destroy();
 	}
 
@@ -371,26 +378,22 @@ class PauseSubState extends MusicBeatSubstate
 		var daSubstate = new OptionsSubstate();
 		daSubstate.goBack = function(changedOptions:Array<String>) {
 			var canResume:Bool = true;
-
 			for (opt in changedOptions) {
-				if (OptionsSubstate.requiresRestart.exists(opt)) {
+				if (OptionsSubstate.requiresRestart.get(opt) == true) {
 					canResume = false;
 					break;
 				}
 			}
 
 			game.optionsChanged(changedOptions);
-			FlxG.mouse.visible = false;
-
 			closeSubState();
-			if (!canResume && changedOptions.length > 0){
-				removeOption("resume");
-				removeOption("skip-to");
+			
+			FlxG.mouse.visible = false;
+			if (!canResume) {
+				removeOption("resume-song");
+				removeOption("skip-to-time");
 				regenMenu();
 			}
-
-			for (camera in daSubstate.camerasToRemove)
-				FlxG.cameras.remove(camera);
 		};
 		openSubState(daSubstate);
 	}
@@ -398,6 +401,24 @@ class PauseSubState extends MusicBeatSubstate
 	function restartFromLastTime() {
 		close();
 		game.skipToTime(game.startedOnTime);
+	}
+
+	function leaveChartingModePrompt() {
+		var ss = new funkin.states.base.AlphabetPromptSubstate(
+			"WARNING!\nAll unsaved charting progress will be lost", 
+			leaveChartingMode
+		);
+		ss.acceptStr = Paths.getString("accept");
+		ss.cancelStr = Paths.getString("cancel");
+		ss.cameras = this.cameras;
+		this.persistentUpdate = this.persistentDraw = false;
+		this.openSubState(ss);
+	}
+
+	function leaveChartingMode() {
+		PlayState.chartingMode = false;
+		PlayState.SONG = PlayState.song.getSwagSong(PlayState.difficultyName);
+		MusicBeatState.switchState(new PlayState());
 	}
 }
 
@@ -410,7 +431,7 @@ class SkipTimeOption extends PauseMenuOption
 	private var holdTime:Float = 0.0;
 
 	public function new() {
-		super('skip-to');
+		super('skip-to-time');
 	}
 
 	override function select() {

@@ -58,6 +58,10 @@ typedef SwagSong = {
 	var validScore:Bool;
 }
 
+typedef JsonEvents = {
+	@:optional var events:Array<PsychEventNote>;
+}
+
 typedef JsonSong = {
 	> SwagSong,
 	var _path:String; // for internal use
@@ -105,71 +109,113 @@ final defaultNoteTypeList:Array<String> = [
 	'No Animation'
 ];
 
+enum abstract ChartVersion(String) from String to String {
+	var LEGACY_FNF = "l.0.0"; // legacy fnf format!
+	var LEGACY_V1 = "l.1.0"; // legacy fnf format, but mustHitSection doesn't swap note behaviour!
+	var CURRENT = LEGACY_V1;
+}
+
 class ChartData
 {
-	//@:deprecated('loadFromJson is deprecated! Use BaseSong.getSwagSong instead!')
-	public static function loadFromJson(jsonInput:String, folder:String, isChartJson:Bool = true):Null<SwagSong>
-	{
-		var path:String = Paths.formatToSongPath(folder) + '/' + Paths.formatToSongPath(jsonInput) + '.json';
-		var fullPath = Paths.getPath('songs/$path', false);
-		return parseSongJson(fullPath, isChartJson);
-	}
-
-	public static function parseSongJson(filePath:String, isChartJson:Bool = true):Null<SwagSong> {
-		try {
-			return _parseSongJson(filePath, isChartJson);
-		}catch(e) {
-			trace('ERROR parsing song JSON: $filePath', e.message);
-			return null;
-		}
-	}
-
-	public static function _parseSongJson(filePath:String, isChartJson:Bool = true):SwagSong {
+	public static function _parseJson(filePath:String):Null<Dynamic> {
 		var rawJson:Null<String> = Paths.getContent(filePath);
-		if (rawJson == null)
-			throw 'song JSON file NOT FOUND: $filePath';
+		if (rawJson == null) throw 'File not found';
 
 		// LOL GOING THROUGH THE BULLSHIT TO CLEAN IDK WHATS STRANGE
 		rawJson = rawJson.trim();
 		while (!rawJson.endsWith("}"))
 			rawJson = rawJson.substr(0, rawJson.length - 1);
 
-		var uncastedJson:Dynamic = Json.parse(rawJson);
-		var songJson:JsonSong;
-		if (isChartJson && uncastedJson.song is String){
-			// PSYCH 1.0 FUCKING DUMBSHIT FIX IT RETARD
-			// why did shadowmario make such a useless format change oh my god :sob:
-			
-			songJson = cast uncastedJson;
-			var stepCrotchet = Conductor.calculateStepCrochet(songJson.bpm);
+		return Json.parse(rawJson);
+	}
 
+	public static function parseSongJson(filePath:String):Null<SwagSong> {
+		try {
+			return _parseSongJson(filePath);
+		}catch(e) {
+			print(Main.callstackToString(haxe.CallStack.exceptionStack(true)));
+			trace('ERROR parsing song JSON: $filePath', e.message);
+			return null;
+		}
+	}
+
+	public static function _parseSongJson(filePath:String):SwagSong {
+		var uncastedJson:Dynamic = _parseJson(filePath);
+		var songJson:JsonSong;
+		
+		// why did shadowmario make such a useless format change oh my god :sob:
+		if (uncastedJson.format is String && (uncastedJson.format:String).startsWith("psych_v1"))
+		{
+			trace('Loading Psych Engine v1.0.0 Chart');
+
+			songJson = cast uncastedJson;
+			var stepCrotchet:Float = Conductor.calculateStepCrochet(songJson.bpm);
+			var keyCount:Int = songJson.keyCount ?? 4;
 			for (section in songJson.notes){
+				if (section.changeBPM)
+					stepCrotchet = Conductor.calculateStepCrochet(section.bpm);
+
 				for (note in section.sectionNotes){
 					var note:Array<Dynamic> = cast note;
-					note[1] = section.mustHitSection ? note[1] : (note[1] + 4) % 8;
+					note[1] = (section.mustHitSection ? note[1] : (note[1] + keyCount)) % (keyCount * 2);
 					note[2] -= stepCrotchet;
 					note[2] = note[2] > 0 ? note[2] : 0;
 				}
 			}
+			songJson._path = filePath;
+			return onLoadLegacyJson(songJson);
 		}else
 			songJson = cast uncastedJson.song;
 
 		songJson._path = filePath;
-		return isChartJson ? onLoadJson(songJson) : onLoadEvents(songJson);
+		return onLoadJson(songJson);
+	}
+
+	public static function parseEventsJson(filePath:String):Null<JsonEvents> {
+		try {
+			return _parseEventsJson(filePath);
+		}catch(e) {
+			print(Main.callstackToString(haxe.CallStack.exceptionStack(true)));
+			trace('ERROR parsing events JSON: $filePath', e.message);
+			return null;
+		}
+	}
+
+	public static function _parseEventsJson(filePath:String):JsonEvents {
+		var uncastedJson:Dynamic = _parseJson(filePath);
+		var eventsJson:JsonEvents;
+
+		if (uncastedJson.format is String && (uncastedJson.format:String).startsWith("psych_v1"))		
+			eventsJson = cast uncastedJson;
+		else
+			eventsJson = cast uncastedJson.song;
+		
+		return onLoadEvents(eventsJson);
 	}
 
 	public static function onLoadJson(songJson:JsonSong):SwagSong
 	{
-		var swagJson:SwagSong = songJson;
-
-		swagJson.validScore = true;
-
 		////
-		if (Reflect.hasField(songJson, 'trollEngine')) {
-			return swagJson;
+		var swagSong:SwagSong;
+		var version:Null<ChartVersion> = Reflect.field(songJson, 'trollEngine');
+		trace('Loading chart version $version');
+		switch(version) {
+			case null | LEGACY_FNF:
+				trace("Converting from LEGACY_FNF");
+				swagSong = onLoadLegacyJson(songJson);
+			case CURRENT:
+				swagSong = songJson;
+			default:
+				swagSong = null;
+				throw 'Unknown chart version: $version';
 		}
 		
-		Reflect.setField(songJson, 'trollEngine', 'l.0.0');
+		swagSong.validScore = true;
+		return swagSong;
+	}
+		
+	public static function onLoadLegacyJson(songJson:JsonSong):SwagSong {
+		var swagJson:SwagSong = songJson;
 
 		////
 		songJson.stage ??= 'stage';
@@ -213,11 +259,16 @@ class ChartData
 			
 		}else {
 			onLoadEvents(swagJson);
-
-			////
-			for (section in swagJson.notes) {
-				for (note in section.sectionNotes) {
+	
+		////
+		var keyCount:Int = songJson.keyCount ?? 4;
+		for (section in swagJson.notes) {
+			if (null == Reflect.field(section, "sectionBeats"))
+				section.sectionBeats = 4;
+			
+			for (note in section.sectionNotes) {
 					var note:Array<Dynamic> = cast note;
+					note[1] = (section.mustHitSection ? note[1] : (note[1] + keyCount)) % (keyCount * 2);
 					note[3] = NoteData.resolveNoteType(note[3]);
 				}
 			}
@@ -229,18 +280,19 @@ class ChartData
 			trace(swagJson.tracks);
 		}
 
+		Reflect.setField(swagJson, "trollEngine", ChartVersion.CURRENT);
+
 		return swagJson;
 	}
 
-	public static function onLoadEvents(songJson:SwagSong) {
+	public static function onLoadEvents(songJson:JsonEvents, checkPsych:Bool = true) {
 		if (songJson.events == null){
 			songJson.events = [];
 		}
 
 		//// convert ancient psych event notes
-		if (songJson.notes != null) {
-			for (secNum in 0...songJson.notes.length) {
-				var sec:SwagSection = songJson.notes[secNum];
+		if (checkPsych && (cast songJson:JsonSong).notes != null) {
+			for (sec in (cast songJson:JsonSong).notes) {
 				var notes:Array<Dynamic> = sec.sectionNotes;
 				var len:Int = notes.length;
 				var i:Int = 0;

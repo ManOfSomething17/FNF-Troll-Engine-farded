@@ -20,9 +20,20 @@ using StringTools;
  * (for example you can have a screen bounce aux mod + node w/ that aux mod as an input, and then change transformX)
  */
 typedef Node = {
-	var in_mods:Array<String>; /// the modifiers that get input into this node
-	var out_mods:Array<String>; // the modifiers that get transformed by this node
-	var nodeFunc:(Array<Float>, Int)->Array<Float>; // takes an array of the input mods' values, and returns an array of transformed modifier values, if out_mods.length > 0
+	/**
+		Modifiers that get input into this node
+	**/
+	var in_mods:Array<String>;
+	
+	/**
+		Modifiers that get transformed by this node
+	**/
+	var out_mods:Array<String>;
+
+	/**
+		Takes an array of the input mods' values, and returns an array of transformed modifier values, if out_mods.length > 0
+	**/
+	var nodeFunc:(values:Array<Float>, player:Int) -> Array<Float>; 
 }
 
 class ModManager {
@@ -550,7 +561,7 @@ class ModManager {
 	public function getBaseX(direction:Int, player:Float, receptorAmount:Int = 4):Float
 	{
 		if (playerOOBIsCentered && (player >= playerAmount || player < 0))
-			player = 0.5; // replicating old behaviour for upcoming modcharts
+			player = (playerAmount - 1) * 0.5; // replicating old behaviour for upcoming modcharts
 		
 		var spaceWidth = FlxG.width / playerAmount;
 		var spaceX = spaceWidth * (playerAmount-1-player);
@@ -600,10 +611,17 @@ class ModManager {
 		if (pos == null)
 			pos = new Vector3();
 
-		diff += (
-			(FlxMath.lerp(Note.swagWidth, Conductor.crotchet * 0.45 * (obj.objType == NOTE ? getNoteSpeed(cast obj, player, field.songSpeed) : getCMod(data, player, field.songSpeed) * getXMod(data, player)), getValue("movePathType", player))) * getValue("movePath", player)) + 
-			getValue("transformPath", player
-		); 
+		var speed:Float = if (obj.objType == NOTE)
+			getNoteSpeed(cast obj, player, field.songSpeed);
+		else
+			getCMod(data, player, field.songSpeed) * getXMod(data, player);
+
+		diff += getValue("transformPath", player);
+		diff += getValue("movePath", player) * FlxMath.lerp(
+			Note.swagWidth,
+			Conductor.crotchet * 0.45 * speed,
+			getValue("movePathType", player)
+		);
 		
 		pos.setTo(
 			Note.halfWidth + field.field.getBaseX(data),
@@ -846,4 +864,16 @@ class ModManager {
 
 	public function queueEaseFuncLB(beat:Float, length:Float, func:EaseFunction, callback:(EaseEvent, Float, Float) -> Void)
 		addEvent(new EaseEvent(beat * 4, (beat + length) * 4, func, callback, this));
+
+	public function queueEaseProps(step:Float, endStep:Float, object:Dynamic, values:Dynamic, ?options:EasePropertiesEvent.TweenOptions)
+		addEvent(new EasePropertiesEvent(step, endStep - step, object, values, options, this));
+
+	public function queueEasePropsL(step:Float, length:Float, object:Dynamic, values:Dynamic, ?options:EasePropertiesEvent.TweenOptions)
+		addEvent(new EasePropertiesEvent(step, length, object, values, options, this));
+
+	public function queueEasePropsB(beat:Float, endBeat:Float, object:Dynamic, values:Dynamic, ?options:EasePropertiesEvent.TweenOptions)
+		addEvent(new EasePropertiesEvent(beat * 4, (endBeat - beat) * 4, object, values, options, this));
+
+	public function queueEasePropsLB(beat:Float, length:Float, object:Dynamic, values:Dynamic, ?options:EasePropertiesEvent.TweenOptions)
+		addEvent(new EasePropertiesEvent(beat * 4, length * 4, object, values, options, this));
 }

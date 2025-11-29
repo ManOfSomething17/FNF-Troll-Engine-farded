@@ -7,45 +7,46 @@
 
 	<!-- _________________________ Application Settings _________________________ -->
 
-    <app title="Friday Night Funkin': Troll Engine" file="Trolled" packageName="com.sowy.trollengine"
-        package="com.sowy.trollengine" main="Main" version="0.2.8" company="Sowy" />
+	<app title="Friday Night Funkin': Troll Engine" file="Trolled" packageName="com.sowy.trollengine"
+		package="com.sowy.trollengine" main="Main" version="0.2.8" company="Sowy" />
 
 	<!--Switch Export with Unique ApplicationID and Icon-->
-    <set name="APP_ID" value="0x0100f6c013bbc000" />
+	<set name="APP_ID" value="0x0100f6c013bbc000" />
 
 	<!--The flixel preloader is not accurate in Chrome. You can use it regularly if you embed the swf into a html file
 		or you can set the actual size of your file manually at "FlxPreloaderBase-onUpdate-bytesTotal"-->
 	<!-- <app preloader="Preloader" resizable="true" /> -->
-    <app preloader="flixel.system.FlxPreloader" />
+	<app preloader="flixel.system.FlxPreloader" />
 
 	<!--Minimum without FLX_NO_GAMEPAD: 11.8, without FLX_NO_NATIVE_CURSOR: 11.2-->
-    <set name="SWF_VERSION" value="11.8" />
+	<set name="SWF_VERSION" value="11.8" />
 
 	<!-- ____________________________ Window Settings ___________________________ -->
 
 	<!--These window settings apply to all targets-->
-    <window width="1280" height="720" fps="60" background="#000000" hardware="true" vsync="false" />
+	<window width="1280" height="720" fps="60" background="#000000" hardware="true" vsync="false" />
 
 	<!--HTML5-specific-->
-    <window if="html5" resizable="true" />
+	<window if="html5" resizable="true" />
 
 	<!--Desktop-specific-->
-    <window if="desktop" orientation="landscape" fullscreen="false" resizable="true" vsync="false" />
+	<window if="desktop" orientation="landscape" fullscreen="false" resizable="true" vsync="false" />
 
 	<!--Mobile-specific-->
-    <window if="mobile" orientation="landscape" fullscreen="true" width="0" height="0"
-        resizable="false" />
+	<window if="mobile" orientation="landscape" fullscreen="true" width="0" height="0"
+		resizable="false" />
 
 	<!--Switch-specific-->
-    <window if="switch" orientation="landscape" fullscreen="true" width="0" height="0"
-        resizable="true" />
+	<window if="switch" orientation="landscape" fullscreen="true" width="0" height="0"
+		resizable="true" />
 
 	<!-- _______________________ TROLL ENGINE CUSTOMIZATION ______________________ -->
 
 	<define name="USE_EPIC_JUDGEMENT" />
 	<define name="HSCRIPT_ALLOWED" />
 	<define name="VIDEOS_ALLOWED" if="cpp" />
-	<define name="MODS_ALLOWED" if="desktop" />
+	<define name="FILESYSTEM_ALLOWED" if="native desktop"/>
+	<define name="MODS_ALLOWED" if="desktop FILESYSTEM_ALLOWED" />
 	<define name="DISCORD_ALLOWED" if="desktop cpp" unless="display" />
 	<!--I don't recommend turning on MULTICORE_LOADING until we rewrite it to be less crashy -Neb-->
 	<!-- <define name="MULTICORE_LOADING" if="native" /> -->
@@ -54,14 +55,12 @@
 
 	<!--Remove if you dont want states to be modified with scripts. This only disables extension/overrides and not the HScriptedState class-->
 	<define name="SCRIPTABLE_STATES" if="HSCRIPT_ALLOWED" />
-	<!--Remove if you don't want NightmareVision mod compatibility-->
-	<define name="NMV_MOD_COMPATIBILITY" if="PE_MOD_COMPATIBILITY MODS_ALLOWED HSCRIPT_ALLOWED"/>
 
 	<!--Remove if you don't want to use FlxAnimate-->
 	<define name="USING_FLXANIMATE" />
 
 	<!--Remove if you don't want to use Moonchart, which allows usage of chart formats from other rhythm games and fnf engines-->
-	<define name="USING_MOONCHART" if="native" />
+	<define name="USING_MOONCHART" if="native MODS_ALLOWED" />
 
 	<!--If you're using git, set this, because Haxe sucks fuck and cant detect if youre on git or 0.4.0 for some fucking reason welcome to haxe ladies and gentlemen-->
 	<!-- <define name="USING_NEW_MOONCHART" /> -->
@@ -73,8 +72,12 @@
 	<!--Anything marked as deprecated should be removed after a major or minor version but not after patches. (major.minor.patch)-->
 	<define name="ALLOW_DEPRECATION" unless="final"/>
 
-	<!--Remove if you don't want options for the game to continue running after a crash -->
+	<!--Remove if you don't want options for the game to continue running after a crash (Windows) -->
 	<define name="WINDOWS_CRASH_HANDLER" if="windows cpp" />
+	
+	<!--Remove if you don't want options for the game to continue running after a crash (macOS & Linux) -->
+	<define name="UNIX_CRASH_HANDLER" if="desktop cpp" unless="windows" />
+
 	<!--Remove if you don't want crash logs to be saved-->
 	<define name="SAVE_CRASH_LOGS" if="CRASH_HANDLER native" />
 
@@ -91,7 +94,7 @@
 	<set name="BUILD_DIR" value="export/32bit" if="32bits" />
 
 	<assets path="assets" />
-	<assets path='default_content' rename='content' embed='false' exclude="*.mp3" />
+	<assets path='default_content' rename='content' if='OFFICIAL_BUILD' embed='false' exclude="*.mp3" />
 
 	<section if="desktop">
 		<assets path="alsoft.txt" rename="alsoft.ini" if="windows" />
@@ -110,10 +113,10 @@
 	<haxelib name="flixel" version="5.6.2" /> <!--You can use up to Flixel 6.0.0 but some stuff might be a bit brokey-->
 	<haxelib name="flixel-ui" version="2.6.1" />
 	<haxelib name="flixel-addons" version="3.2.3" />
-
+	<haxelib name="funkin.vis"/>
+	<haxelib name="grig.audio"/>
 	<section if="USING_FLXANIMATE">
-		<haxelib name="flxanimate" version="3.0.4"/>
-		<classpath path="flxAnimateShadow"/> <!--Remove if FlxAnimate updates and lets you write your own code to determine how filesystem shit is gotten-->
+		<haxelib name="flixel-animate" version="1.3.1"/>
 	</section>
 
 	<section if="USING_MOONCHART">
@@ -139,6 +142,13 @@
 
 	<haxelib name="faxe" if='switch'/>
 	<haxelib name="hxcpp-debug-server" if="debug" unless="telemetry"/>
+
+	<!--
+		native file dialog library
+		used as a replacement for lime's file dialog shit because it fucking SUCKS
+		especially on linux where it just freezes the entire app <3 -swordcube
+	-->
+	<haxelib name="linc_filedialogs" if="desktop cpp" />
 		
 	<!-- ______________________________ Haxedefines _____________________________ -->
 
@@ -149,6 +159,9 @@
 		<haxedef name="openfl-enable-handle-error" />
 	</section>
 		
+	<haxedef name="HXCPP_CPP11" if="desktop cpp" />
+	<define name="HXCPP_CPP11" if="desktop cpp" />
+	
 	<define name="NO_PRECOMPILED_HEADERS" if="linux" />
 
 	<!-- <haxedef name="no_traces" if="final"/> -->

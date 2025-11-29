@@ -4,7 +4,6 @@ import haxe.io.Bytes;
 import openfl.utils.ByteArray;
 import haxe.ds.StringMap;
 import funkin.data.LocalizationMap;
-import funkin.data.WeekData;
 import flixel.addons.display.FlxRuntimeShader;
 import flixel.graphics.frames.FlxAtlasFrames;
 import flixel.graphics.FlxGraphic;
@@ -17,7 +16,7 @@ import haxe.Json;
 
 using StringTools;
 
-#if sys
+#if FILESYSTEM_ALLOWED
 import sys.FileSystem;
 import sys.io.File;
 #end
@@ -29,20 +28,18 @@ class Paths
 	inline public static var IMAGE_EXT = "png";
 	inline public static var SOUND_EXT = "ogg";
 
-	public static final HSCRIPT_EXTENSIONS:Array<String> = ["hscript", "hxs", "hx"];
+	public static final HSCRIPT_EXTENSIONS:Array<String> = ["hscript", "hxs",];
 	public static final SCRIPT_EXTENSIONS:Array<String> = [
 		"hscript",
 		"hxs",
-		"hx",
 	];
 
 
-	public static function getFileWithExtensions(scriptPath:String, extensions:Array<String>) {
+	public static function getFileWithExtensions(scriptPath:String, extensions:Array<String>):Null<String> {
 		for (fileExt in extensions) {
-			var baseFile:String = '$scriptPath.$fileExt';
-			var file:String = getPath(baseFile);
-			if (Paths.exists(file))
-				return file;
+			var fullPath = getPath('$scriptPath.$fileExt');
+			if (fullPath != null)
+				return fullPath;
 		}
 
 		return null;
@@ -55,10 +52,18 @@ class Paths
 		
 		return false;
 	}
-	public inline static function getHScriptPath(scriptPath:String)
+	public inline static function getHScriptPath(scriptPath:String):Null<String>
 	{
 		#if HSCRIPT_ALLOWED
 		return getFileWithExtensions(scriptPath, Paths.HSCRIPT_EXTENSIONS);
+		#else
+		return null;
+		#end
+	}
+
+	public inline static function hscript(key:String):Null<String> {
+		#if HSCRIPT_ALLOWED
+		return getFileWithExtensions(key, Paths.HSCRIPT_EXTENSIONS);
 		#else
 		return null;
 		#end
@@ -77,6 +82,7 @@ class Paths
 		'$contentFolderName/global/music/breakfast.$SOUND_EXT',
 		'assets/images/Garlic-Bread-PNG-Images.$IMAGE_EXT'
 	];
+	public static var graphicDumpExclusions:Array<FlxGraphic> = [];
 
 	public static function excludeAsset(key:String)
 	{
@@ -86,7 +92,7 @@ class Paths
 
 	public static function init() {
 		#if html5
-		HTML5Paths.initPaths();
+		AltFilePaths.initPaths();
 		#end
 
 		#if MODS_ALLOWED
@@ -107,7 +113,7 @@ class Paths
 				// get rid of it
 				var obj = currentTrackedAssets.get(key);
 				@:privateAccess
-				if (obj != null)
+				if (obj != null && !graphicDumpExclusions.contains(obj))
 				{
 					destroyGraphic(obj);
 					currentTrackedAssets.remove(key);
@@ -145,7 +151,7 @@ class Paths
 		// clear anything not in the tracked assets list
 		@:privateAccess
 		for (key => obj in FlxG.bitmap._cache) {
-			if (obj != null && !currentTrackedAssets.exists(key)) {
+			if (obj != null && !currentTrackedAssets.exists(key) && !graphicDumpExclusions.contains(obj)) {
 				// trace('cleared $key');
 				destroyGraphic(obj);
 			}
@@ -163,23 +169,22 @@ class Paths
 		localTrackedAssets.resize(0);
 	}
 
-	public static function getPath(key:String, ignoreMods:Bool = false):String
+	public static function getPath(key:String):Null<String>
 	{
+		var path:String;
+
 		#if MODS_ALLOWED
-		if (ignoreMods != true) {
-			var modPath:String = Paths.modFolders(key);
-			if (Paths.exists(modPath)) return modPath;
-		}
+		path = Paths.modFolders(key);
+		if (Paths.exists(path)) return path;
 		#end
 
-		return Paths.getPreloadPath(key);	
-	}
-
-	public static function _getPath(key:String, ignoreMods:Bool = false):Null<String>
-	{
-		var path:String = getPath(key, ignoreMods);
+		path = Paths.getPreloadPath(key);
 		return Paths.exists(path) ? path : null;
 	}
+
+	@:deprecated("_getPath is deprecated, use getPath instead.")
+	inline public static function _getPath(key:String):Null<String>
+		return getPath(key);
 
 	inline public static function getPreloadPath(file:String = '')
 	{
@@ -211,19 +216,19 @@ class Paths
 		return getPath('fonts/$key');
 	}
 
-	static public function video(key:String, ignoreMods:Bool = false, ext:String = "mp4"):String
+	static public function video(key:String, ext:String = "mp4"):String
 	{
-		return getPath('videos/$key.$ext', ignoreMods);
+		return getPath('videos/$key.$ext');
 	}
 
 	static public function getShaderFragment(name:String):Null<String>
 	{
-		return _getPath('shaders/$name.frag');
+		return getPath('shaders/$name.frag');
 	}
 	
 	static public function getShaderVertex(name:String):Null<String>
 	{
-		return _getPath('shaders/$name.vert');
+		return getPath('shaders/$name.vert');
 	}
 
 	inline static public function sound(key:String, ?library:String):Null<Sound>
@@ -260,43 +265,43 @@ class Paths
 		return path.endsWith("/") ? path.substr(0, -1) : path;
 
 	inline static public function exists(path:String, ?type:AssetType):Bool {
-		#if sys 
+		#if FILESYSTEM_ALLOWED 
 		return FileSystem.exists(path);
 		#else
 		return Assets.exists(path, type);
 		#end
 	}
 	inline static public function getContent(path:String):Null<String> {
-		#if sys
+		#if FILESYSTEM_ALLOWED
 		return FileSystem.exists(path) ? File.getContent(path) : null;
 		#else
 		return Assets.exists(path) ? Assets.getText(path) : null;
 		#end
 	}
 	inline static public function getBytes(path:String):Null<haxe.io.Bytes> {
-		#if sys
+		#if FILESYSTEM_ALLOWED
 		return FileSystem.exists(path) ? File.getBytes(path) : null;
 		#else
 		return Assets.exists(path) ? Assets.getBytes(path) : null;
 		#end
 	}
 	inline static public function isDirectory(path:String):Bool {
-		#if sys
+		#if FILESYSTEM_ALLOWED
 		return FileSystem.exists(path) && FileSystem.isDirectory(path);
 		#else
-		return HTML5Paths.isDirectory(path);
+		return AltFilePaths.isDirectory(path);
 		#end
 	}
 	inline static public function getDirectoryFileList(path:String):Array<String> {
-		#if sys
+		#if FILESYSTEM_ALLOWED
 		return !isDirectory(path) ? [] : FileSystem.readDirectory(path);
 		#else
-		return HTML5Paths.getDirectoryFileList(path);
+		return AltFilePaths.getDirectoryFileList(path);
 		#end
 	}
 
 	inline public static function getText(path:String):Null<String> {
-		#if sys
+		#if FILESYSTEM_ALLOWED
 		if (FileSystem.exists(path))
 			return File.getContent(path);
 		#end
@@ -307,7 +312,7 @@ class Paths
 		return null;
 	}
 	inline public static function getBitmapData(path:String):Null<BitmapData> {
-		#if sys
+		#if FILESYSTEM_ALLOWED
 		if (FileSystem.exists(path))
 			return BitmapData.fromFile(path);
 		#end
@@ -318,7 +323,7 @@ class Paths
 		return null;
 	}
 	inline public static function getSound(path:String):Null<Sound> {
-		#if sys
+		#if FILESYSTEM_ALLOWED
 		if (FileSystem.exists(path))
 			return Sound.fromFile(path);
 		#end
@@ -359,6 +364,16 @@ class Paths
 		);
 	}
 
+	inline static public function getTextureAtlas(key:String, ?library:String)
+	{
+		#if USING_FLXANIMATE
+		var path = animateAtlasPath(key, library);
+		return animate.FlxAnimateFrames.fromAnimate(path);
+		#else
+		return null;
+		#end
+	}
+
 	/** returns a FlxRuntimeShader but with file names lol **/ 
 	public static function getShader(fragFile:String = null, vertFile:String = null, version:Int = null):FlxRuntimeShader
 	{
@@ -380,7 +395,7 @@ class Paths
 	**/
 	inline static public function iterateDirectory(path:String, func:haxe.Constraints.Function):Bool
 	{
-		#if sys
+		#if FILESYSTEM_ALLOWED
 		if (!FileSystem.exists(path) || !FileSystem.isDirectory(path))
 			return false;
 		
@@ -390,21 +405,21 @@ class Paths
 		return true;
 		
 		#else
-		return HTML5Paths.iterateDirectory(path, func);
+		return AltFilePaths.iterateDirectory(path, func);
 		#end
 	}
 
-	inline static public function fileExists(key:String, ?type:AssetType, ?ignoreMods:Bool = false, ?library:String)
+	inline static public function fileExists(key:String, ?type:AssetType, ?library:String)
 	{
-		return Paths.exists(getPath(key, ignoreMods));
+		return Paths.exists(getPath(key));
 	}
 
 	/** Returns the contents of a file as a string. **/
-	inline public static function text(key:String, ?ignoreMods:Bool = false):Null<String>
-		return getContent(getPath(key, ignoreMods));
+	inline public static function text(key:String):Null<String>
+		return getContent(getPath(key));
 
-	inline public static function bytes(key:String, ?ignoreMods:Bool = false):Null<Bytes>
-		return getBytes(getPath(key, ignoreMods));
+	inline public static function bytes(key:String):Null<Bytes>
+		return getBytes(getPath(key));
 
 	inline static public function formatToSongPath(path:String) {
 		var finalPath = "";
@@ -481,7 +496,7 @@ class Paths
 	{
 		var path:String = imagePath(key, folder);
 
-		var graphic = getGraphic(path, true, allowGPU);
+		var graphic = (path==null) ? null : getGraphic(path, true, allowGPU);
 		if (graphic==null && Main.showDebugTraces)
 			trace('bitmap "$key" => "$path" returned null.');
 
@@ -493,6 +508,11 @@ class Paths
 		return getPath('$path/$key.$SOUND_EXT');
 	}
 
+	inline public static function animateAtlasPath(key:String, ?library:String):String
+	{
+		return getPath('images/$key');
+	}
+	
 	inline public static function returnFolderSound(path:String, key:String, ?library:String)
 		return returnSound(soundPath(path, key, library), library);
 
@@ -522,9 +542,9 @@ class Paths
 	}
 
 	/** Return the contents of a file, parsed as a JSON. **/
-	static public function json(key:String, ?ignoreMods:Bool = false):Null<Dynamic>
+	static public function json(key:String):Null<Dynamic>
 	{
-		var rawJSON:Null<String> = text(key, ignoreMods);
+		var rawJSON:Null<String> = text(key);
 		if (rawJSON == null) 
 			return null;
 		
@@ -538,7 +558,7 @@ class Paths
 	}
 
 	public static inline function getFolderPath(folder:String = ""):String
-		return (folder == "") ? getPreloadPath() : mods(folder);
+		return (folder == "") ? getPreloadPath() : mods(folder) + "/";
 
 	////	
 	public static var currentModDirectory(default, set):String = '';
@@ -703,8 +723,8 @@ class Paths
 			Reflect.setField(data, "weeks", Reflect.field(data, "chapters"));
 			Reflect.deleteField(data, "chapters");
 			return data;
-		}else { // Lets assume it's an old TGT metadata
-			return {weeks: [data]};
+		}else {
+			return {};
 		}
 	}
 
@@ -788,8 +808,8 @@ class Paths
 		return currentStrings.get(key);
 }
 
-class HTML5Paths {
-	#if !sys 
+private class AltFilePaths {
+	#if !FILESYSTEM_ALLOWED 
 	// Directory => Array with file/sub-directory names
 	static var dirMap = new Map<String, Array<String>>();
 
@@ -891,11 +911,6 @@ typedef FreeplayCategoryMetadata = {
 }
 
 typedef ContentMetadata = {
-	/**
-		Weeks to be added to the story mode
-	**/
-	var weeks:Array<funkin.data.WeekData.WeekMetadata>;
-	
 	/**
 		Content that will load before this content.
 	**/

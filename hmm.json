@@ -45,12 +45,12 @@
 		{
 			"name": "hxvlc",
 			"type": "haxelib",
-			"version": "2.0.1"
+			"version": "2.1.4"
 		},
 		{
-			"name": "flxanimate",
+			"name": "flixel-animate",
 			"type": "haxelib",
-			"version": "3.0.4"
+			"version": "1.3.1"
 		},
 		{
 			"name": "hxdiscord_rpc",
@@ -58,16 +58,30 @@
 			"version": "1.1.1"
 		},
 		{
-			"name": "linc_luajit",
-			"type": "git",
-			"dir": null,
-			"ref": "master",
-			"url": "https://github.com/riconuts/linc_luajit"
-		},
-		{
 			"name": "moonchart",
 			"type": "haxelib",
 			"version": "0.5.0"
+		},
+		{
+			"name": "funkin.vis",
+			"type": "git",
+			"dir": null,
+			"ref": "main",
+			"url": "https://github.com/nebulazorua/trollVis.git"
+		},
+		{
+			"name": "grig.audio",
+			"type": "git",
+			"dir": "src",
+			"ref": "main",
+			"url": "https://gitlab.com/haxe-grig/grig.audio.git"
+		},
+		{
+			"name": "linc_filedialogs",
+			"type": "git",
+			"dir": null,
+			"ref": "main",
+			"url": "https://github.com/swordcube/linc_filedialogs"
 		}
 	]
 }

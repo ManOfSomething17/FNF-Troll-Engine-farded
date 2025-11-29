@@ -18,11 +18,11 @@ enum OptionType {
 }
 
 typedef OptionData = {
-	display:String,
-	desc:String,
-	type:OptionType,
-	?value:Dynamic,
-	data:Map<String, Dynamic>,
+	var display:String;
+	var desc:String;
+	var type:OptionType;
+	var ?value:Dynamic;
+	var data:Map<String, Dynamic>;
 }
 
 #if !macro
@@ -689,6 +689,13 @@ class ClientPrefs {
 				value: true,
 				data: []
 			},
+			"discordRPC_hideDetails" => {
+				display: "Hide Details",
+				desc: "Toggles Discord Rich Presence details.",
+				type: Toggle,
+				value: false,
+				data: []
+			},
 			"autoPause" => {
 				display: "Auto-pausing",
 				desc: "When toggled, Game will pause if the window is unfocused.",
@@ -941,6 +948,7 @@ class ClientPrefs {
 		FlxG.stage.quality = ClientPrefs.globalAntialiasing ? BEST : LOW; // does nothing!!!!
 
 		#if DISCORD_ALLOWED
+		DiscordClient.hideDetails = discordRPC_hideDetails;
 		discordRPC ? DiscordClient.start() : DiscordClient.shutdown();
 		#end
 

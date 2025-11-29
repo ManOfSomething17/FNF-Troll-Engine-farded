@@ -21,6 +21,7 @@ class MasterEditorMenu extends MusicBeatState
 		'Character Editor',
 		'Chart Editor',
 		'Test Stage',
+		'VSlice Converter',
 		/*
 		'Stage Editor',
 		'Stage Builder',
@@ -49,7 +50,7 @@ class MasterEditorMenu extends MusicBeatState
 
 		#if DISCORD_ALLOWED
 		// Updating Discord Rich Presence
-		DiscordClient.changePresence("Editors Menu", null);
+		DiscordClient.changePresence({details: "Editors Menu"});
 		#end
 
 		var bg:FlxSprite = new FlxSprite(0, 0, Paths.image('menuDesat'));
@@ -64,6 +65,7 @@ class MasterEditorMenu extends MusicBeatState
 				case 'Song Select': MusicBeatState.switchState(new SongSelectState()); return;
 				case 'Character Editor': MusicBeatState.switchState(new CharacterEditorState(Character.DEFAULT_CHARACTER, false));
 				case 'Chart Editor': LoadingState.loadAndSwitchState(new ChartingState(), false);
+				case 'VSlice Converter': MusicBeatState.switchState(new funkin.states.editors.VSliceConverter());
 				/*
 				case 'Stage Editor': MusicBeatState.switchState(new StageEditorState());
 				case 'Stage Builder': MusicBeatState.switchState(new StageBuilderState());

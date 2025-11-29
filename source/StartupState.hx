@@ -1,7 +1,7 @@
 package;
 
 import funkin.*;
-import funkin.states.MusicBeatState;
+import funkin.states.base.MusicBeatState;
 import funkin.states.FadeTransitionSubstate;
 
 import funkin.data.Highscore;
@@ -58,6 +58,10 @@ class StartupState extends FlxTransitionableState
 
 		Highscore.load();
 
+		#if USING_MOONCHART
+		funkin.data.Moonchart.MoonchartContent.init();
+		#end
+
 		FNFGame.specialKeysEnabled = true;
 		FlxG.keys.preventDefaultKeys = [TAB];
 		FlxG.fixedTimestep = false;
@@ -74,6 +78,22 @@ class StartupState extends FlxTransitionableState
 
 		FlxTransitionableState.defaultTransIn = FadeTransitionSubstate;
 		FlxTransitionableState.defaultTransOut = FadeTransitionSubstate;
+
+		#if FUNNY_ALLOWED
+		var bread = Main.bread;
+		bread.bitmapData = Paths.image("Garlic-Bread-PNG-Images").bitmap;
+		
+		function onGameResize(stageWidth, stageHeight){
+			var scaleFactor = stageHeight / FlxG.initialHeight;
+			bread.scaleX = scaleFactor;
+			bread.scaleY = scaleFactor;
+			bread.x = (stageWidth - bread.width) / 2;
+			bread.y = (stageHeight - bread.height) / 2;
+		}
+		
+		onGameResize(FlxG.width, FlxG.height);
+		FlxG.signals.gameResized.add(onGameResize);
+		#end
 	}
 
 	override function create()

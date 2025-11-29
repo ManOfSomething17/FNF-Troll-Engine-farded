@@ -2,7 +2,8 @@ package funkin.scripts;
 
 import haxe.CallStack;
 #if USING_FLXANIMATE
-import funkin.objects.FlxAnimateCompat; // vscode stfu
+import animate.FlxAnimate;
+import animate.FlxAnimateFrames;
 #end
 import funkin.scripts.FunkinScript.ScriptType;
 import funkin.objects.IndependentVideoSprite;
@@ -10,14 +11,13 @@ import funkin.scripts.*;
 import funkin.scripts.Globals.*;
 
 import funkin.states.PlayState;
-import funkin.states.MusicBeatState;
-import funkin.states.MusicBeatSubstate;
+import funkin.states.base.MusicBeatState;
+import funkin.states.base.MusicBeatSubstate;
 
 import funkin.input.Controls;
 import funkin.api.Windows;
 
 import flixel.FlxG;
-import flixel.math.FlxPoint;
 
 import lime.app.Application;
 import haxe.Constraints.Function;
@@ -62,11 +62,28 @@ class FunkinHScript extends FunkinScript
 		return new FunkinHScript(null, name, additionalVars, false);
 	}
 
-	/** No exception catching or display */
-	public static function _fromString(script:String, ?name:String = "Script", ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true)
+	/**
+		Creates a `FunkinHScript` instance with code from a string.  
+
+		@param script The script code.
+		@param name An optional name to give the script.
+		@param additionalVars A map of variables to define on this script before running its code.
+		@param doCreateCall Whether to call `onCreate` on this script.
+		@returns A `FunkinHScript` instance.
+	**/
+	public static function _fromString(script:String, ?name:String = "Script", ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true):FunkinHScript
 		return new FunkinHScript(parseString(script, name), name, additionalVars, doCreateCall);
 
-	// safe ver
+	/**
+		Creates a `FunkinHScript` instance with code from a string.  
+		If a parsing error occurs, a message box is displayed.
+
+		@param script The script code.
+		@param name An optional name to give the script.
+		@param additionalVars A map of variables to define on this script before running its code.
+		@param doCreateCall Whether to call `onCreate` on this script.
+		@returns A `FunkinHScript` instance.
+	**/
 	public static function fromString(script:String, ?name:String = "Script", ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true):FunkinHScript
 	{
 		try {
@@ -84,14 +101,28 @@ class FunkinHScript extends FunkinScript
 		return new FunkinHScript(null, name, additionalVars, doCreateCall);
 	}
 
+	/**
+		Creates a `FunkinHScript` instance with code from a file.  
+		If a parsing error occurs, a message box is displayed.  
+
+		@param file The *full* path containing the script code.
+		@param name An optional name to give the script.
+		@param additionalVars A map of variables to define on this script before running its code.
+		@param doCreateCall Whether to call `onCreate` on this script.
+		@returns A `FunkinHScript` instance.
+	**/
 	public static function fromFile(file:String, ?name:String, ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true):FunkinHScript
 	{
 		name ??= file;
 
-		trace('Loading haxe script from: $file');
-
 		try {
-			return _fromString(Paths.getContent(file), name, additionalVars, doCreateCall);
+			var fileContent = Paths.getContent(file);
+			if (fileContent != null) {
+				print('Loading haxe script from: $file');
+				return _fromString(fileContent, name, additionalVars, doCreateCall);
+			}else {
+				print('HScript file: "$file" not found!');
+			}
 		}
 		catch(e:haxe.Exception) {
 			var msg = "Error parsing hscript! " + e.message;
@@ -146,41 +177,6 @@ class FunkinHScript extends FunkinScript
 		
 		set("getClass", Type.resolveClass);
 		set("getEnum", Type.resolveEnum);
-		
-		#if NMV_MOD_COMPATIBILITY
-		set("addHaxeLibrary", function(c:String, ?p:String){
-			// Dumb hardcoded whatever idc!!!
-
-			if (c == 'KUTValueHandler')
-				return;
-
-			if (c == 'HitSingleMenu'){
-				importClass("funkin.states.FreeplayState");
-				return;
-			}
-
-			if (p == 'meta.states')
-				p = 'funkin.states';
-
-			if (p == 'gameObjects')
-				p = 'funkin.objects';
-
-			if (p == 'gameObjects.shader')
-				p = 'funkin.objects.shaders';
-
-			if (p == 'meta.data')
-				p = 'funkin.data';
-
-			if (p == 'meta.data.scripts')
-				p = 'funkin.scripts';
-
-
-			if(p != null)
-				importClass('$p.$c');
-			else
-				importClass(c);
-		});
-		#end
 		set("importClass", importClass);
 		set("importEnum", importEnum);
 
@@ -222,7 +218,7 @@ class FunkinHScript extends FunkinScript
 		var currentState = flixel.FlxG.state;
 		
 		set("state", currentState);
-		set("game", currentState);
+		set("game", PlayState.instance);
 		
 		if (currentState is PlayState){
 			var currentState:PlayState = cast currentState;
@@ -246,39 +242,40 @@ class FunkinHScript extends FunkinScript
 		set("FlxSprite", FlxSprite);
 		set("FlxCamera", FlxCamera);
 		set("FlxSound", FlxSound);
+		set("FlxText", flixel.text.FlxText);
 		set("FlxMath", flixel.math.FlxMath);
-		set("FlxTimer", flixel.util.FlxTimer);
+		set("FlxGroup", flixel.group.FlxGroup);
 		set("FlxTween", flixel.tweens.FlxTween);
 		set("FlxEase", flixel.tweens.FlxEase);
-		set("FlxGroup", flixel.group.FlxGroup);
+		set("FlxTimer", flixel.util.FlxTimer);
 		set("FlxSave", flixel.util.FlxSave); // should probably give it 1 save instead of giving it FlxSave
 		set("FlxBar", flixel.ui.FlxBar);
 
-		set("FlxAxes", Wrappers.FlxAxes);
+		set("FlxParticle", flixel.effects.particles.FlxParticle);
+		set("FlxTypedEmitter", flixel.effects.particles.FlxEmitter.FlxTypedEmitter);
+
+		#if flixel_addons
+		set("FlxBackdrop", flixel.addons.display.FlxBackdrop);
+		set("FlxSkewedSprite", flixel.addons.effects.FlxSkewedSprite);
+		set("FlxTiledSprite", flixel.addons.display.FlxTiledSprite);
+		set("FlxRuntimeShader", flixel.addons.display.FlxRuntimeShader);
+		#end
+		#if USING_FLXANIMATE
+		set("FlxAnimate", FlxAnimate);
+		set("FlxAnimateFrames", FlxAnimateFrames);
+		#end
+		// Enums
 		set("FlxBarFillDirection", flixel.ui.FlxBar.FlxBarFillDirection);
-		set("FlxText", flixel.text.FlxText);
 		set("FlxTextBorderStyle", flixel.text.FlxText.FlxTextBorderStyle);
 		set("FlxCameraFollowStyle", flixel.FlxCamera.FlxCameraFollowStyle);
 
-		set("FlxRuntimeShader", flixel.addons.display.FlxRuntimeShader);
-
-		set("FlxParticle", flixel.effects.particles.FlxParticle);
-		set("FlxTypedEmitter", flixel.effects.particles.FlxEmitter.FlxTypedEmitter);
-		set("FlxSkewedSprite", flixel.addons.effects.FlxSkewedSprite);
-
 		// Abstracts
 		set("BlendMode", Wrappers.BlendMode);
-
-		set("FlxColor", Wrappers.SowyColor);
-		set("FlxPoint", {
-			get: FlxPoint.get,
-			weak: FlxPoint.weak
-		});
 		set("FlxTextAlign", Wrappers.FlxTextAlign);
-		set("FlxTweenType", Wrappers.FlxTweenType); 
-		#if USING_FLXANIMATE
-		set("FlxAnimate", FlxAnimateCompat);
-		#end
+		set("FlxTweenType", Wrappers.FlxTweenType);
+		set("FlxAxes", Wrappers.FlxAxes);
+		set("FlxColor", Wrappers.SowyColor);
+		set("FlxPoint", Wrappers.FlxPoint);
 	}
 
 	private function setVideoVars() {
@@ -381,6 +378,8 @@ class FunkinHScript extends FunkinScript
 
 		set("HScriptedState", funkin.states.scripting.HScriptedState);
 		set("HScriptedSubstate", funkin.states.scripting.HScriptedSubstate);
+
+		set("Highscore", funkin.data.Highscore); // Useful for stuff like levels showing diff songs before and after finishing (i.e Weekend 1)
 	} 
 
 	function importClass(className:String)

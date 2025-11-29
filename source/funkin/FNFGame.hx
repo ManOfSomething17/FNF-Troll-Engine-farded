@@ -1,10 +1,14 @@
 package funkin;
 
 import funkin.scripts.Globals;
-import funkin.states.MusicBeatState;
+import funkin.states.base.MusicBeatState;
 
 import flixel.util.typeLimit.NextState;
 import flixel.input.keyboard.FlxKey;
+
+import lime.app.Application.current as application;
+
+import openfl.events.KeyboardEvent;
 
 #if CRASH_HANDLER
 import haxe.CallStack;
@@ -21,7 +25,9 @@ import lime.system.System;
 #if (windows && cpp)
 import funkin.api.Windows;
 #end
-
+#if linc_filedialogs
+import filedialogs.FileDialogs;
+#end
 #end
 
 #if SCRIPTABLE_STATES
@@ -36,29 +42,15 @@ class FNFGame extends FlxGame
 	public static var fullscreenKeys:Array<FlxKey> = [FlxKey.F11];
 	public static var specialKeysEnabled(default, set):Bool;
 
-	@:noCompletion inline public static function set_specialKeysEnabled(val)
-	{
-		if (val) {
-			FlxG.sound.muteKeys = muteKeys;
-			FlxG.sound.volumeDownKeys = volumeDownKeys;
-			FlxG.sound.volumeUpKeys = volumeUpKeys;
-		}
-		else {
-			FlxG.sound.muteKeys = [];
-			FlxG.sound.volumeDownKeys = [];
-			FlxG.sound.volumeUpKeys = [];
-		}
-
-		return specialKeysEnabled = val;
-	}
-
 	public function new(gameWidth = 0, gameHeight = 0, ?initialState:InitialState, updateFramerate = 60, drawFramerate = 60, skipSplash = false, ?startFullscreen:Bool)
 	{
 		@:privateAccess FlxG.initSave();
 		startFullscreen = startFullscreen ?? FlxG.save.data.fullscreen;
 
 		super(gameWidth, gameHeight, initialState, updateFramerate, drawFramerate, skipSplash, startFullscreen);
+		#if FLX_SOUND_TRAY
 		_customSoundTray = flixel.system.ui.DefaultFlxSoundTray;
+		#end
 
 		FlxG.sound.volume = FlxG.save.data.volume;
 		FlxG.mouse.useSystemCursor = true;
@@ -69,18 +61,9 @@ class FNFGame extends FlxGame
 		FlxG.signals.focusGained.add(resetSpriteCache);
 
 		////
-		#if (windows || linux) // No idea if this also applies to any other targets
 		FlxG.stage.addEventListener(
-			openfl.events.KeyboardEvent.KEY_DOWN, 
-			(e)->{
-				// Prevent Flixel from listening to key inputs when switching fullscreen mode
-				if (e.keyCode == FlxKey.ENTER && e.altKey)
-					e.stopImmediatePropagation();
-
-				// Also add F11 to switch fullscreen mode
-				if (specialKeysEnabled && fullscreenKeys.contains(e.keyCode))
-					FlxG.fullscreen = !FlxG.fullscreen;
-			}, 
+			KeyboardEvent.KEY_DOWN, 
+			_onKeyPress, 
 			false, 
 			100
 		);
@@ -89,7 +72,6 @@ class FNFGame extends FlxGame
 			openfl.events.FullScreenEvent.FULL_SCREEN, 
 			(e) -> FlxG.save.data.fullscreen = e.fullScreen
 		);
-		#end
 
 		////
 		#if CRASH_HANDLER
@@ -108,6 +90,23 @@ class FNFGame extends FlxGame
 		untyped __global__.__hxcpp_set_critical_error_handler(onCrash);
 		#end
 		#end
+	}
+
+	private function _onKeyPress(e:KeyboardEvent) {
+		#if (windows || linux) // No idea if this also applies to any other targets
+		// Prevent Flixel from listening to key inputs when pressing Alt+Enter
+		if (e.altKey && e.keyCode == FlxKey.ENTER)
+			e.stopImmediatePropagation();
+		#end
+
+		// Also add F11 to switch fullscreen mode
+		if (specialKeysEnabled && fullscreenKeys.contains(e.keyCode))
+			FlxG.fullscreen = !FlxG.fullscreen;
+
+		if (e.keyCode == FlxKey.F3) {
+			Main.fpsVar.visible = !Main.fpsVar.visible;
+			ClientPrefs.showFPS = Main.fpsVar.visible;
+		}
 	}
 
 	override function update():Void
@@ -224,7 +223,7 @@ class FNFGame extends FlxGame
 	}
 
 	// shader coords fix
-	private function resetSpriteCache() {
+	public function resetSpriteCache() {
 		for (cam in FlxG.cameras.list) {
 			if (cam != null && cam.filters != null)
 				Main.resetSpriteCache(cam.flashSprite);
@@ -263,7 +262,28 @@ class FNFGame extends FlxGame
 				// Close the game
 		}
 		#else
-		lime.app.Application.current.window.alert(callstack, errorName);
+		
+		#if (UNIX_CRASH_HANDLER && linc_filedialogs)
+		// class name is a bit misleading for the function used
+		// but it does also handle file dialogs, soooo
+		boxMessage += "\nWould you like to goto the main menu?";
+		final btn:Button = FileDialogs.message(
+			errorName, boxMessage,
+			Choice.Yes_No_Cancel, Icon.Error
+		);
+		switch(btn) {
+			case Yes: 
+				toMainMenu();
+				return;
+			case Cancel:
+				// Continue with a possibly unstable state
+				return;
+			default:
+				// Close the game
+		}
+		#else
+		application.window.alert(callstack, errorName); // this shit barely works on linux!
+		#end
 		#end
 
 		#if sys 
@@ -285,4 +305,20 @@ class FNFGame extends FlxGame
 		FlxG.game.switchState();
 	}
 	#end
+
+	@:noCompletion inline public static function set_specialKeysEnabled(val)
+	{
+		if (val) {
+			FlxG.sound.muteKeys = muteKeys;
+			FlxG.sound.volumeDownKeys = volumeDownKeys;
+			FlxG.sound.volumeUpKeys = volumeUpKeys;
+		}
+		else {
+			FlxG.sound.muteKeys = [];
+			FlxG.sound.volumeDownKeys = [];
+			FlxG.sound.volumeUpKeys = [];
+		}
+
+		return specialKeysEnabled = val;
+	}
 }

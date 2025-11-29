@@ -180,7 +180,7 @@ class OptionsSubstate extends MusicBeatSubstate
 				]
 			],
 			#if DISCORD_ALLOWED
-			["discord", ["discordRPC"]],
+			["discord", ["discordRPC", "discordRPC_hideDetails"]],
 			#end
 			#if DO_AUTO_UPDATE
 			[
@@ -373,6 +373,9 @@ class OptionsSubstate extends MusicBeatSubstate
 			#if DISCORD_ALLOWED
 			case 'discordRPC':
 				val ? DiscordClient.start(true) : DiscordClient.shutdown(true);
+			case 'discordRPC_hideDetails':
+				DiscordClient.hideDetails = val;
+				if (val) DiscordClient.changePresence(null);
 			#end
 			case 'autoPause':
 				FlxG.autoPause = val;
@@ -511,7 +514,6 @@ class OptionsSubstate extends MusicBeatSubstate
 
 	public var camerasToRemove:Array<FlxCamera> = [];
 
-	public var transCamera:FlxCamera = new FlxCamera();
 	public var optState:Bool = false;
 	public function new(state:Bool=false){
 		optState=state;
@@ -548,12 +550,10 @@ class OptionsSubstate extends MusicBeatSubstate
 		overlayCamera = new FlxCamera();
 		overlayCamera.bgColor.alpha = 0;
 		
-		transCamera.bgColor.alpha = 0;
 		if(optState){
 			FlxG.cameras.reset(mainCamera);
 			FlxG.cameras.add(optionCamera, false);
 			FlxG.cameras.add(overlayCamera, false);
-			FlxG.cameras.add(transCamera, false);
 			//FlxG.cameras.setDefaultDrawTarget(mainCamera, true);
 			camerasToRemove.push(mainCamera);
 
@@ -569,12 +569,10 @@ class OptionsSubstate extends MusicBeatSubstate
 			FlxG.cameras.add(mainCamera, false);
 			FlxG.cameras.add(optionCamera, false);
 			FlxG.cameras.add(overlayCamera, false);
-			FlxG.cameras.add(transCamera, false);
 		}
 
 		camerasToRemove.push(optionCamera);
 		camerasToRemove.push(overlayCamera);
-		camerasToRemove.push(transCamera);
 
 		cameras = [mainCamera];
 
@@ -1508,6 +1506,13 @@ class OptionsSubstate extends MusicBeatSubstate
 					goBack(changed);
 			}
 		} 
+	}
+
+	override function close() {
+		for (camera in camerasToRemove)
+			FlxG.cameras.remove(camera);
+
+		super.close();
 	}
 
 	override function destroy()

@@ -1,5 +1,6 @@
 package funkin.states.editors;
 
+import funkin.data.StageData;
 import funkin.states.TitleState.TitleLogo;
 import flixel.util.FlxColor;
 import funkin.objects.Alphabet;
@@ -187,7 +188,7 @@ class TestState extends MusicBeatState{
 		titleStepper.cameras = [camHUD];
 		group.add(titleStepper);
 		
-		var stageNames = Stage.getAllStages();
+		var stageNames = StageData.getAllStages();
 		var bgStepper = new FlxUINumericStepper(10, 70, 1, 0, 0, stageNames.length-1, 0);
 		bgStepper.cameras = [camHUD];
 		group.add(bgStepper);
@@ -195,7 +196,7 @@ class TestState extends MusicBeatState{
 		function updateShit(){
 			// Logo Update 
 			var newLogoName = titleNames[Std.int(titleStepper.value)];
-			if (logoBl != null && logoBl.titleName != newLogoName){
+			if (logoBl != null && logoBl.logoName != newLogoName){
 				group.remove(logoBl).destroy();
 				logoBl = null;
 			}
