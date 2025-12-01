@@ -147,6 +147,9 @@ class SongSelectState extends MusicBeatSubstate
 	override public function update(e)
 	{
 		var speed = 1;
+		
+		if (FlxG.mouse.wheel != 0)
+			curSelected -= FlxG.mouse.wheel;
 
 		if (controls.UI_UP || controls.UI_DOWN){
 			if (controls.UI_DOWN_P){
