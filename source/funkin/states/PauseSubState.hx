@@ -19,7 +19,16 @@ import flixel.util.FlxStringUtil;
 class PauseSubState extends MusicBeatSubstate
 {
 	public static var instance:PauseSubState = null;
+
+	/** 
+		Song to play on the pause menu. 
+		If `null` then no music will be played.
+	**/
 	public static var songName:Null<String> = null;
+
+	public static function resetVariables() {
+		songName = 'breakfast';
+	}
 
 	public var menu:AlphabetMenu;
 
@@ -114,7 +123,9 @@ class PauseSubState extends MusicBeatSubstate
 		for (info in Song.getMetadataInfo(game.metadata))
 			songInfo.push(info);
 
-		songInfo.push("Difficulty: " + game.displayedDifficulty.toUpperCase());		
+		var charts = (PlayState.song==null) ? null : PlayState.song.getCharts(); 
+		if (charts != null && charts.length > 1)
+			songInfo.push("Difficulty: " + game.displayedDifficulty.toUpperCase());		
 		
 		if (game.practiceMode)
 			songInfo.push("PRACTICE MODE");
@@ -135,8 +146,8 @@ class PauseSubState extends MusicBeatSubstate
 		FlxG.mouse.visible = false;
 		persistentUpdate = false;
 
-		var cam:FlxCamera = FlxG.cameras.list[FlxG.cameras.list.length - 1];
-		this.cameras = [cam];
+		if (_cameras == null || _cameras.length == 0) 
+			camera = FlxG.cameras.list[FlxG.cameras.list.length - 1];
 
 		@:privateAccess
 		_bgSprite._cameras = this._cameras;
@@ -238,13 +249,13 @@ class PauseSubState extends MusicBeatSubstate
 		}
 
 		var md = MusicData.fromName(songName);
-		if (md != null) {
-			pauseMusic = md.makeFlxSound();
-		}
-		#if (true || ALLOW_DEPRECATION)
-		else {
+		if (md == null) {
 			var sndPath = Paths.soundPath("music", songName);
-			if (Paths.exists(sndPath)) {
+			if (sndPath != null) {
+				md = new MusicData(sndPath);
+				md.songName = songName;
+
+				#if (ALLOW_DEPRECATION)
 				var loopTimePath = new haxe.io.Path(sndPath);
 				loopTimePath.file += "-loopTime";
 				loopTimePath.ext = "txt";
@@ -253,19 +264,14 @@ class PauseSubState extends MusicBeatSubstate
 				var loopTime:Float = (loopTime == null) ? 0 : Std.parseFloat(loopTime);
 				if (Math.isNaN(loopTime)) loopTime = 0;
 				
-				pauseMusic = new FlxSound();
-				pauseMusic.context = MUSIC;
-				pauseMusic.loadEmbedded(Paths.returnSound(sndPath));
-				pauseMusic.loopTime = loopTime;
-				pauseMusic.looped = true;
-				FlxG.sound.list.add(pauseMusic);
+				md.loopTime = loopTime;
+				#end
 			}
 		}
-		#end
 
-		if (pauseMusic != null) {
-			pauseMusic.volume = 0;
-			pauseMusic.play(false, FlxG.random.int(0, Std.int(pauseMusic.length * 0.5)));
+		if (md != null) {
+			pauseMusic = md.play(null, 0.0);
+			pauseMusic.time = FlxG.random.float(pauseMusic.time, (pauseMusic.endTime ?? pauseMusic.length) * 0.5);
 			pauseMusic.fadeIn(5, 0, 0.75);
 		}else {
 			trace('Pause music not found: $songName');
@@ -307,6 +313,8 @@ class PauseSubState extends MusicBeatSubstate
 		c.cameras = this.cameras;
 		c.start(0.5);
 		add(c);
+		
+		FlxTween.tween(_bgSprite, {alpha: 0.0}, 0.3, {ease: FlxEase.quartInOut});
 	}
 
 	function restartSong() {
