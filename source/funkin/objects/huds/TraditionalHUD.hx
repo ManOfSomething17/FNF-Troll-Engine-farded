@@ -274,7 +274,7 @@ class TraditionalHUD extends CommonHUD
 			funnyFormat = new FlxTextFormatMarkerPair(formatting, "<fc>");
 
 			// hi-score markups, obv
-			scoreFormatting = new FlxTextFormat(0xFFFFEB87, false, false, 0xFF000000);
+			scoreFormatting = new FlxTextFormat(0xFFF7E92C, false, false, 0xFF000000);
 			lessFunnyFormat = new FlxTextFormatMarkerPair(scoreFormatting, "<hi-s>");
 
 			scoreTxt.text = getStatusText();
