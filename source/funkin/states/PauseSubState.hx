@@ -172,10 +172,11 @@ class PauseSubState extends MusicBeatSubstate
 		if (curOption != null)
 			curOption.update(elapsed);
 		
+		if (controls.BACK || controls.ACCEPT && countdown != null)
+			close();
+
 		super.update(elapsed);
 
-		if (controls.BACK)
-			close();
 	}
 
 	public function onSelectedOption(id:Int, obj:Alphabet) {
@@ -291,6 +292,8 @@ class PauseSubState extends MusicBeatSubstate
 		super.destroy();
 	}
 
+	var countdown: Countdown;
+
 	//// Option functions
 	function resumeSong() {
 		if (!ClientPrefs.countUnpause) {
@@ -308,12 +311,13 @@ class PauseSubState extends MusicBeatSubstate
 
 		menu.inputsActive = false;
 
-		var c = new Countdown(game); // https://tenor.com/view/letter-c-darwin-tawog-the-amazing-world-of-gumball-dance-gif-17949158
-		if (game != null) game.initCountdown(c);
-		c.onComplete = this.close;
-		c.cameras = this.cameras;
-		c.start(0.5);
-		add(c);
+		countdown = new Countdown(game); // https://tenor.com/view/letter-c-darwin-tawog-the-amazing-world-of-gumball-dance-gif-17949158
+		if (game != null) game.initCountdown(countdown);
+		countdown.onComplete = this.close;
+		countdown.cameras = this.cameras;
+		countdown.start(0.5);
+		pauseMusic.fadeOut(1, 0);
+		add(countdown);
 		
 		FlxTween.tween(_bgSprite, {alpha: 0.0}, 0.3, {ease: FlxEase.quartInOut});
 	}
@@ -378,14 +382,21 @@ class PauseSubState extends MusicBeatSubstate
 	}
 
 	function openModifiers() {
+		var ss = new GameplayChangersSubstate();
+		ss.cameras = cameras;
+		this.openSubState(ss);
 		this.persistentDraw = false;
-		this.openSubState(new GameplayChangersSubstate());
 	}
 
 	function openOptions() {
 		this.persistentDraw = false;
-		var daSubstate = new OptionsSubstate();
+		var daSubstate = new OptionsSubstate(true);
 		daSubstate.goBack = function(changedOptions:Array<String>) {
+			game.optionsChanged(changedOptions);
+			closeSubState();
+
+			FlxG.mouse.visible = false;
+
 			var canResume:Bool = true;
 			for (opt in changedOptions) {
 				if (OptionsSubstate.requiresRestart.get(opt) == true) {
@@ -394,10 +405,6 @@ class PauseSubState extends MusicBeatSubstate
 				}
 			}
 
-			game.optionsChanged(changedOptions);
-			closeSubState();
-			
-			FlxG.mouse.visible = false;
 			if (!canResume) {
 				removeOption("resume-song");
 				removeOption("skip-to-time");
