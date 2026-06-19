@@ -61,6 +61,7 @@ using Lambda;
 typedef ChartingStateOptions = {
 	var ?autosave:String;
 	var ignoreWarnings:Bool;
+	var showHistoryDisplay:Bool;
 	var vortex:Bool;
 	var mouseScrollingQuant:Bool;
 	var noAutoScroll:Bool;
@@ -89,6 +90,10 @@ typedef ChartingStateSession = {
 	var trackVolumes:Map<String, Float>;
 }
 
+private var editor(get, never):ChartingState;
+private inline function get_editor()
+	return ChartingState.instance;
+
 @:access(flixel.sound.FlxSound._sound)
 @:access(openfl.media.Sound.__buffer)
 @:allow(funkin.states.editors.ChartingState)
@@ -106,6 +111,7 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 	public static function getDefaultOptions():ChartingStateOptions return {
 		autosave: null,
 		ignoreWarnings: false,
+		showHistoryDisplay: true,
 		vortex: false,
 		mouseScrollingQuant: false,
 		noAutoScroll: false,
@@ -617,7 +623,8 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 
 	function onChartLoaded() {
 		if (_song == null) {
-			var ss = new SongSelectState(FlxColor.fromRGB(0,0,0,240));
+			var ss = new SongSelectState();
+			ss.bgColor = FlxColor.fromRGB(0,0,0,240);
 			ss.onSelectChart = function(song:BaseSong, chartId:String) {
 				Song.loadSong(song, chartId);
 				_song = PlayState.SONG;
@@ -664,7 +671,7 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 		progressBar.maxValue = songLength;
 		progressBar.maxLabel.text = formatTime(songLength);
 
-		//historyDisplay.exists = true;
+		historyDisplay.exists = options.showHistoryDisplay;
 
 		if (UI_box != null) {
 			UI_box.destroy();
@@ -952,51 +959,13 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 		var saveZipButton = newFlxUIButton(110, saveEventJson.y + 30, 'Save as ZIP', saveSongZIP);
 
 		///
-		var reloadSongJson:FlxUIButton = newFlxUIButton(saveButton.x + 90, saveButton.y, "Reload JSON", function()
-		{
-			showWarning('This action will clear current progress.\n\nProceed?', loadJson.bind(_song.song));
-		});
+		var reloadSongJson:FlxUIButton = newFlxUIButton(saveButton.x + 90, saveButton.y, "Reload JSON", reloadSongJSON);
 		reloadSongJson.color = 0xFFFF0000;
 
-		var loadAutosaveBtn:FlxUIButton = newFlxUIButton(reloadSongJson.x, reloadSongJson.y + 30, 'Load Autosave', function()
-		{
-			var autosaved:Dynamic = options.autosave;
-			if (autosaved == null) {
-				showPopup("There is no autosaved data");
-			}else if (!Std.isOfType(autosaved, String)) {
-				showPopup("Invalid autosaved data");
-			}else{
-				var _song:Dynamic = Json.parse(autosaved);
-				
-				// Ugh
-				var _session:ChartingStateSession = Reflect.field(_song, "_chartEditor");
-				if (_session.trackVolumes != null && !Std.isOfType(_session.trackVolumes, haxe.ds.StringMap) && Reflect.isObject(_session.trackVolumes))
-					_session.trackVolumes = cast CoolUtil.structureToMap(_session.trackVolumes);
-
-				MusicBeatState.switchState(new ChartingState(_song));
-			}
-		});
+		var loadAutosaveBtn:FlxUIButton = newFlxUIButton(reloadSongJson.x, reloadSongJson.y + 30, 'Load Autosave', loadAutosave);
 
 		////
-		function onOpenEvents(resource) {
-			var data:Dynamic = Json.parse((resource:Bytes).toString());
-
-			var song:SwagSong = Reflect.field(data, "song"); 
-			if (song == null)
-				return;
-		
-			var events = ChartData.onLoadEvents(data.song).events;
-			if (events == null)
-				return;
-
-			_song.events = events;
-			doUpdateGridObjects = true;
-		}
-
-		var loadEventJson:FlxUIButton = newFlxUIButton(loadAutosaveBtn.x, loadAutosaveBtn.y + 30, 'Open Events', function() {
-			final openEvents:Void->Void = CoolUtil.showOpenDialog.bind('Open Events', getSongPath('events.json'), ['*.json'], onOpenEvents);
-			showWarning('This action will clear the current events.\n\nProceed?', openEvents);
-		});
+		var loadEventJson:FlxUIButton = newFlxUIButton(loadAutosaveBtn.x, loadAutosaveBtn.y + 30, 'Open Events', openEventsJSON);
 
 		////
 		var editTracksButton:FlxUIButton = newFlxUIButton(loadAutosaveBtn.x, loadEventJson.y + 40, 'Edit Tracks', function() {
@@ -2564,6 +2533,9 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 	}
 
 	function checkCanMouseScroll():Bool {
+		if (historyDisplay.exists && FlxG.mouse.overlaps(historyDisplay))
+			return false;
+
 		for (dropDownMenu in blockPressWhileScrolling) {
 			if (dropDownMenu.header.button.status == FlxButton.HIGHLIGHT)
 				return false;
@@ -2929,6 +2901,7 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 		
 		if (FlxG.keys.justPressed.F6) {
 			historyDisplay.exists = !historyDisplay.exists;
+			options.showHistoryDisplay = historyDisplay.exists;
 		}
 
 		if (FlxG.keys.justPressed.ENTER) {
@@ -3185,7 +3158,8 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 	}
 
 	function openSongSelect() {
-		var ss = new SongSelectState(FlxColor.fromRGB(0,0,0,240));
+		var ss = new SongSelectState();
+		ss.bgColor = FlxColor.fromRGB(0,0,0,240);
 		ss.songs = SongSelectState.getEverySong();
 		ss.curSelected = CoolUtil.indexOfSong(ss.songs, PlayState.song);
 		if (ss.curSelected == -1) ss.curSelected = 0;
@@ -4136,6 +4110,51 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 		}
 	}
 
+	function onOpenEventsFile(resource:Bytes) {
+		var data:Dynamic = Json.parse(resource.toString());
+
+		var song:SwagSong = Reflect.field(data, "song"); 
+		if (song == null)
+			return;
+	
+		var events = ChartData.onLoadEvents(data.song).events;
+		if (events == null)
+			return;
+
+		_song.events = events;
+		doUpdateGridObjects = true;
+	}
+
+	function reloadSongJSON()
+	{
+		showWarning('This action will clear current progress.\n\nProceed?', loadJson.bind(_song.song));
+	}
+
+	function loadAutosave()
+	{
+		var autosaved:Dynamic = options.autosave;
+		if (autosaved == null) {
+			showPopup("There is no autosaved data");
+		}else if (!Std.isOfType(autosaved, String)) {
+			showPopup("Invalid autosaved data");
+		}else{
+			var _song:Dynamic = Json.parse(autosaved);
+			showPopup('Load autosave?\n\nThis will clear the current progress.', function() {
+				// Ugh
+				var _session:ChartingStateSession = Reflect.field(_song, "_chartEditor");
+				if (_session.trackVolumes != null && !Std.isOfType(_session.trackVolumes, haxe.ds.StringMap) && Reflect.isObject(_session.trackVolumes))
+					_session.trackVolumes = cast CoolUtil.structureToMap(_session.trackVolumes);
+	
+				MusicBeatState.switchState(new ChartingState(_song));
+			});
+		}
+	}
+
+	function openEventsJSON() {
+		final openEvents:Void->Void = CoolUtil.showOpenDialog.bind('Open Events', getSongPath('events.json'), ['*.json'], onOpenEventsFile);
+		showWarning('This action will clear the current events.\n\nProceed?', openEvents);
+	}
+
 	function sortNotesByTime(Obj1:NoteData, Obj2:NoteData):Int
 		return FlxSort.byValues(FlxSort.ASCENDING, Obj1.strumTime, Obj2.strumTime);
 	
@@ -4467,6 +4486,7 @@ private class HistoryDisplay extends FlxSpriteGroup {
 				action = utRay[actionIdx];
 			}else {
 				action = null;
+				actionIdx = -1;
 			}
 
 			var txtIdx = txts.length - i;
@@ -4483,16 +4503,21 @@ private class HistoryDisplay extends FlxSpriteGroup {
 
 			txt.color = action_reverted ? 0xFF000000 : 0xFFFFFFFF;
 			txt.text = (action == null) ? " " : Std.string(action);
+			txt.ID = actionIdx;
 		}
 	}
 
 	override function update(elapsed:Float) {
-		if (FlxG.keys.justPressed.V) {
-			scrollIdx--;
-			updateDisplay();
-		}
-		if (FlxG.keys.justPressed.N) {
-			scrollIdx++;
+		var scrollChange:Int = FlxG.mouse.overlaps(this) ? -FlxG.mouse.wheel : 0;
+
+		if (FlxG.keys.justPressed.V)
+			scrollChange--;
+		
+		if (FlxG.keys.justPressed.N)
+			scrollChange++;
+		
+		if (scrollChange != 0) {
+			scrollIdx += scrollChange;
 			updateDisplay();
 		}
 
@@ -4500,6 +4525,23 @@ private class HistoryDisplay extends FlxSpriteGroup {
 			curIdx = ChartingState.instance.utIdx;
 			scrollIdx = 0;
 			updateDisplay();
+		}
+
+		if (FlxG.mouse.justPressed) {
+			for (txt in txts) {
+				if (!FlxG.mouse.overlaps(txt))
+					continue;
+				var actionIdx = txt.ID;
+				if (actionIdx == -1 || actionIdx == curIdx)
+					break;
+				else if (actionIdx < curIdx)
+					while (ChartingState.instance.utIdx != actionIdx)
+						ChartingState.instance.undo();
+				else
+					while (ChartingState.instance.utIdx != actionIdx)
+						ChartingState.instance.redo();
+				break;
+			}
 		}
 
 		for (obj in bgs) obj.update(elapsed);
