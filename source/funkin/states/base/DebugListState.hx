@@ -111,6 +111,9 @@ class DebugListState extends MusicBeatSubstate
 			if (ySecsHolding > 0.35 && checkNewHold - checkLastHold > 0)
 				changeSelection((checkNewHold - checkLastHold) * controls.UI_VERTICAL * stepSize);
 		}
+		
+		if (FlxG.mouse.wheel != 0)
+			changeSelection(1);
 
 		if (controls.ACCEPT) 
 		{

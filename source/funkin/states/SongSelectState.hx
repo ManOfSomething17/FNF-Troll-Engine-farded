@@ -199,6 +199,9 @@ class ChartSelectSubstate extends MusicBeatSubstate
 		if (FlxG.keys.justPressed.DOWN || FlxG.keys.justPressed.S)
 			changeSel(1);
 
+		if (FlxG.mouse.wheel != 0)
+			changeSel(1);
+
 		if (FlxG.keys.justPressed.R) {
 			openSubState(new ResetScoreSubState(
 				song.songId,
