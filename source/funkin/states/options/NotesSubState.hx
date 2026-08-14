@@ -1,11 +1,13 @@
 package funkin.states.options;
 
+import flixel.math.FlxMath;
 import flixel.group.FlxSpriteGroup;
 import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.util.FlxColor;
 import funkin.objects.shaders.ColorSwap;
+import funkin.util.FileUtil;
 
 using StringTools;
 
@@ -26,7 +28,7 @@ class NotesSubState extends MusicBeatSubstate
 	
 	var selectionOverlay:FlxSpriteGroup;
 
-	var posX = 230;
+	inline static final posX:Int = 230;
 	var daCam:FlxCamera;
 
 	////
@@ -43,7 +45,7 @@ class NotesSubState extends MusicBeatSubstate
 		if (ClientPrefs.noteSkin == "Quants") {
 			// fuck you
 			valuesArray = ClientPrefs.quantHSV;
-			noteFrames = Paths.getSparrowAtlas('QUANTNOTE_assets');
+			noteFrames = Paths.sparrowAtlas('QUANTNOTE_assets');
 			noteAnimations = ['purple0', 'blue0', 'green0', 'red0'];
 			namesArray = [
 				"4th",
@@ -73,14 +75,14 @@ class NotesSubState extends MusicBeatSubstate
 			];
 		} else {
 			valuesArray = ClientPrefs.arrowHSV;
-			noteFrames = Paths.getSparrowAtlas('NOTE_assets');
-			noteAnimations = ['purple0', 'blue0', 'green0', 'red0'];
-			namesArray = ["Left", "Down", "Up", "Right"];
-			defaults = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+			noteFrames = Paths.sparrowAtlas('NOTE_assets');
+			noteAnimations = ['purple0', 'blue0', 'green0', 'red0', 'square0'];
+			namesArray = ["Left", "Down", "Up", "Right", "Center"];
+			defaults = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
 		}
 	}
 
-	function onOpenValuesFile(bytes:haxe.io.Bytes) {
+	inline function onOpenValuesFile(bytes:haxe.io.Bytes) {
 		loadFromString(bytes.toString());
 	}
 
@@ -119,8 +121,8 @@ class NotesSubState extends MusicBeatSubstate
 		add(grpNumbers);
 		
 		////
-		for (i in 0...valuesArray.length) {
-			var yPos:Float = (165 * i) + 35;
+		for (i in 0...namesArray.length) {
+			var yPos:Float = (165  * i) + 35;
 			for (j in 0...valueNames.length) {
 				var optionText:Alphabet = new Alphabet(0, yPos + 60, '', true);
 				optionText.fieldWidth = 225;
@@ -132,7 +134,7 @@ class NotesSubState extends MusicBeatSubstate
 
 			var note:FlxSprite = new FlxSprite(posX, yPos);
 			note.frames = noteFrames;
-			note.animation.addByPrefix('idle', noteAnimations[i % 4]);
+			note.animation.addByPrefix('idle', noteAnimations[i % noteAnimations.length]);
 			note.animation.play('idle');
 			grpNotes.add(note);
 
@@ -172,7 +174,7 @@ class NotesSubState extends MusicBeatSubstate
 			var line = strLines[i];
 			if (line == null) break;
 
-			for (j => v in line.split(' '))
+			for (j => v in line.split(','))
 				hsb[j] = Std.parseInt(v) ?? 0;
 		}
 		updateValueVisuals();
@@ -181,19 +183,21 @@ class NotesSubState extends MusicBeatSubstate
 	function saveToString():String {
 		var txt = "";
 		for (vals in valuesArray)
-			txt += vals.join(" ") + "\n";
+			txt += vals.join(",") + "\n";
 		return txt.rtrim();
 	}
 
 	function openValuesFile() {
 		sys.FileSystem.createDirectory('user_hsb');
-		CoolUtil.showOpenDialog("Open File", "user_hsb", onOpenValuesFile);
+		FileUtil.showOpenDialog("Open File", "user_hsb/hsb.csv", onOpenValuesFile);
 	}
 
 	function saveValuesFile() {
 		sys.FileSystem.createDirectory('user_hsb');
-		CoolUtil.showSaveDialog(saveToString(), "Save File", 'user_hsb');
+		FileUtil.showSaveDialog(saveToString(), "Save File", 'user_hsb/hsb.csv');
 	}
+
+	// TODO: add proper presets instead of just this file stuff bruh wtf
 
 	function menuUpdate(elapsed:Float) {
 		if (FlxG.keys.pressed.CONTROL) {
@@ -326,12 +330,7 @@ class NotesSubState extends MusicBeatSubstate
 	}
 
 	function changeSelection(change:Int = 0) {
-		curSelected += change;
-		if (curSelected < 0)
-			curSelected = valuesArray.length-1;
-		if (curSelected > valuesArray.length-1)
-			curSelected = 0;
-
+		curSelected = FlxMath.wrap(curSelected + change, 0, namesArray.length - 1);
 		curValue = valuesArray[curSelected][typeSelected];
 		updateValue();
 

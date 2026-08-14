@@ -3,8 +3,8 @@ package funkin.states.base;
 import funkin.data.MusicData;
 import flixel.math.FlxMath;
 import funkin.input.Controls;
-import flixel.addons.transition.FlxTransitionableState;
-import flixel.addons.ui.FlxUIState;
+import funkin.Conductor;
+import funkin.states.base.TransitionableState;
 import openfl.media.Sound;
 import openfl.ui.MouseCursor;
 import openfl.ui.Mouse;
@@ -14,31 +14,13 @@ import flixel.util.typeLimit.NextState;
 
 #if HSCRIPT_ALLOWED
 import funkin.scripts.FunkinHScript;
-import funkin.states.scripting.*;
+import funkin.states.scripting.HScriptedState;
 #end
 
 #if SCRIPTABLE_STATES
 import funkin.states.scripting.HScriptOverridenState;
 #end
 
-enum abstract SongSyncMode(String) to String {
-	var DIRECT = "Direct";
-	var LEGACY = "Legacy";
-	var PSYCH_1_0 = "Psych 1.0";
-	var LAST_MIX = "Last Mix";
-	var SYSTEM_TIME = "System Time";
-	
-	public static function fromString(str:String):SongSyncMode {
-		return switch (str) {
-			case "Direct": DIRECT;
-			case "Legacy": LEGACY;
-			case "Psych 1.0": PSYCH_1_0;
-			case "System Time": SYSTEM_TIME;
-			//case "Last Mix": LAST_MIX;
-			default: LAST_MIX;
-		}
-	} 
-}
 #if SCRIPTABLE_STATES
 @:autoBuild(funkin.macros.ScriptingMacro.addScriptingCallbacks([
 	"create",
@@ -49,42 +31,25 @@ enum abstract SongSyncMode(String) to String {
 	"closeSubState",
 	"stepHit",
 	"beatHit",
-	"sectionHit"
+	"sectionHit",
+	"getDebugText",
 ]))
 #end
-class MusicBeatState extends FlxUIState
+class MusicBeatState extends TransitionableState
 {
-	public var updateSongPos:Bool = true;
-	
 	private var curSection:Int = 0;
-	private var stepsToDo:Int = 0;
-
-	#if true
 	private var curStep(get, set):Int;
 	private var curBeat(get, set):Int;
 	private var curDecStep(get, set):Float;
 	private var curDecBeat(get, set):Float;
-	@:noCompletion inline function get_curStep() return Conductor.curStep;
-	@:noCompletion inline function get_curBeat() return Conductor.curBeat;
-	@:noCompletion inline function get_curDecStep() return Conductor.curDecStep;
-	@:noCompletion inline function get_curDecBeat() return Conductor.curDecBeat;
-	@:noCompletion inline function set_curStep(v) return Conductor.curStep=v;
-	@:noCompletion inline function set_curBeat(v) return Conductor.curBeat=v;
-	@:noCompletion inline function set_curDecStep(v) return Conductor.curDecStep=v;
-	@:noCompletion inline function set_curDecBeat(v) return Conductor.curDecBeat=v;
-	#end
 
+	private var updateSongPos:Bool = true;
 	private var songSyncMode(default, set):SongSyncMode;
-	private function set_songSyncMode(v:SongSyncMode):SongSyncMode {
-		songSyncMode = v;
-		Conductor.useAccPosition = songSyncMode == SYSTEM_TIME;
-		return songSyncMode;
-	}
-
 	private var controls(get, never):Controls;
 
 	public var canBeScripted(get, default):Bool = false;
-	@:noCompletion function get_canBeScripted() return canBeScripted;
+
+	private var sectionEndStep:Int = 0;
 
 	//// To be defined by the scripting macro
 	@:noCompletion public var _extensionScript:FunkinHScript;
@@ -96,13 +61,46 @@ class MusicBeatState extends FlxUIState
 		return;
 
 	////
+	@:noCompletion inline function get_curStep() return Conductor.curStep;
+	@:noCompletion inline function get_curBeat() return Conductor.curBeat;
+	@:noCompletion inline function get_curDecStep() return Conductor.curDecStep;
+	@:noCompletion inline function get_curDecBeat() return Conductor.curDecBeat;
+	@:noCompletion inline function set_curStep(v) return Conductor.curStep=v;
+	@:noCompletion inline function set_curBeat(v) return Conductor.curBeat=v;
+	@:noCompletion inline function set_curDecStep(v) return Conductor.curDecStep=v;
+	@:noCompletion inline function set_curDecBeat(v) return Conductor.curDecBeat=v;
+
+	@:noCompletion function set_songSyncMode(v:SongSyncMode):SongSyncMode {
+		return Conductor.songSyncMode = v;
+	}
+
+	@:noCompletion inline function get_controls():Controls
+		return funkin.input.Controls.firstActive;
+
+	@:noCompletion function get_canBeScripted()
+		return canBeScripted;
+
+	////
 	public function new(canBeScripted:Bool = true) {
 		super();
 		this.canBeScripted = canBeScripted;
 		this.songSyncMode = LAST_MIX;
 	}
 
-	override public function destroy() 
+	override function create()
+	{
+		FlxG.autoPause = ClientPrefs.autoPause;
+		super.create();
+	}
+
+	override function update(elapsed:Float)
+	{
+		if (updateSongPos)
+			updateSongPosition();
+		super.update(elapsed);
+	}
+
+	override public function destroy()
 	{
 		super.destroy();
 		
@@ -112,195 +110,9 @@ class MusicBeatState extends FlxUIState
 		}
 	}
 
-	inline function get_controls():Controls
-		return funkin.input.Controls.firstActive;
-
-	override function create() 
-	{
-		FlxG.autoPause = ClientPrefs.autoPause;
-		
-		super.create();
-	}
-
-	override public function onFocus():Void
-	{
-		super.onFocus();
-	}
-
-	override public function onFocusLost():Void
-	{
-		super.onFocusLost();
-	}
-	
-	private var lastMixTimer:Float = 0;
-	private var lastMixPos:Float = 0;
-
-	private function updateSongPosition(?inst:FlxSound):Void {
-		inst ??= Conductor.tracks[0];
-		if (inst == null) return;
-
-		@:privateAccess
-		var elapsedMS:Float = FlxG.game._elapsedMS * inst.pitch;
-
-		switch (songSyncMode)
-		{
-			case DIRECT:
-				// Ludem Dare sync
-				// Jittery and retarded, but works maybe
-				Conductor.songPosition = inst.time;
-
-			case LEGACY:
-				// Resync Vocals
-				// FUCKING SUCKS DONT USE LMFAO! It's here just incase though
-				Conductor.songPosition += elapsedMS;
-				
-			case PSYCH_1_0:
-				// Psych 1.0 method
-				// Since this works better for Rico so might work better for some other machines too
-				Conductor.songPosition += elapsedMS;
-				Conductor.songPosition = FlxMath.lerp(inst.time, Conductor.songPosition, Math.exp(-elapsedMS * 0.005));
-				var timeDiff:Float = Math.abs(inst.time - Conductor.songPosition);
-				if (timeDiff > 1000)
-					Conductor.songPosition = Conductor.songPosition + 1000 * FlxMath.signOf(timeDiff);
-
-			case SYSTEM_TIME:
-				Conductor.songPosition = Conductor.getAccPosition();
-			
-			case LAST_MIX:
-				// Stepmania method
-				// Works for most people it seems??
-				if (lastMixPos != inst.time) {
-					lastMixPos = inst.time;
-					lastMixTimer = 0;
-				}else {
-					lastMixTimer += elapsedMS;
-				}
-				
-				Conductor.songPosition = lastMixPos + lastMixTimer;
-
-		}
-	}
-
-	private function updateSteps() {	
-		var oldStep:Int = Conductor.curStep;
-		Conductor.updateSteps();
-		var curStep:Int = Conductor.curStep;
-
-		if (oldStep != curStep) {
-			if (curStep > 0) {
-				stepHit();
-				if (curStep % 4 == 0)
-					beatHit();
-			}
-
-			if (PlayState.SONG != null)
-			{
-				if (oldStep < curStep)
-					updateSection();
-				else
-					rollbackSection();
-			}
-		}
-	}
-
-	override function update(elapsed:Float)
-	{
-		if (updateSongPos) {
-			if (FlxG.sound.music != null)
-				Conductor.songPosition = FlxG.sound.music.time;
-			else
-				Conductor.songPosition += elapsed * 1000;
-		}
-		updateSteps();
-		super.update(elapsed);
-	}
-
-	private function updateSection():Void
-	{
-		if (stepsToDo < 1) stepsToDo = Math.round(getBeatsOnSection() * 4);
-		while (curStep >= stepsToDo)
-		{
-			curSection++;
-			var beats:Float = getBeatsOnSection();
-			stepsToDo += Math.round(beats * 4);
-			sectionHit();
-		}
-	}
-
-
-	private function rollbackSection():Void
-	{
-		if(curStep < 0) return;
-
-		var lastSection:Int = curSection;
-		curSection = 0;
-		stepsToDo = 0;
-		for (i in 0...PlayState.SONG.notes.length)
-		{
-			if (PlayState.SONG.notes[i] != null)
-			{
-				stepsToDo += Math.round(getBeatsOnSection() * 4);
-				if(stepsToDo > curStep) break;
-				
-				curSection++;
-			}
-		}
-
-		if(curSection > lastSection) sectionHit();
-	}
-
-	public static function switchState(nextState:NextState)
-	{
-		FlxG.autoPause = false;
-		FlxG.mouse.visible = false;
-		Mouse.cursor = MouseCursor.AUTO;
-
-		FlxG.switchState(nextState); // just because im too lazy to goto every instance of switchState and change it to a FlxG call
-	}
-
-	public static function resetState(?skipTrans:Bool = false) {
-		if (skipTrans) {
-			FlxTransitionableState.skipNextTransIn = true;
-			FlxTransitionableState.skipNextTransOut = true;
-		}
-
-		#if SCRIPTABLE_STATES
-		if (FlxG.state is HScriptOverridenState) {
-			var state:HScriptOverridenState = cast FlxG.state;
-			var overriden = HScriptOverridenState.fromAnother(state);
-
-			if (overriden!=null) {
-				FlxG.switchState(overriden);
-			}else {
-				trace("State override script file is gone!", "Switching to", state.parentClass);
-				FlxG.switchState(Type.createInstance(state.parentClass, []));
-			}
-		} else
-		#end
-			FlxG.resetState();
-	}
-
-	public static function getState():MusicBeatState
-	{
-		return cast FlxG.state;
-	}
-
-	function resyncTracks() {
-		Conductor.resyncTracks();
-		lastMixPos = Conductor.songPosition;
-	}
-
 	public function stepHit():Void
 	{
-		if (Conductor.playing) {
-			for (track in Conductor.tracks) {
-				if (track.playing && Math.abs(track.time - Conductor.getAccPosition()) > 30) {
-					trace('sus track resync');
-					resyncTracks();
-					break;
-				}
-			}	
-		}		
+		//trace('Step: ' + curStep);
 	}
 
 	public function beatHit():Void
@@ -313,12 +125,95 @@ class MusicBeatState extends FlxUIState
 		//trace('Section: ' + curSection + ', Beat: ' + curBeat + ', Step: ' + curStep);
 	}
 
-	function getBeatsOnSection():Float
-	{		
-		var section = PlayState?.SONG.notes[curSection];
-		return section==null ? 4 : Conductor.sectionBeats(section);
+	public function getDebugText():String {
+		return 'curSection: ${curSection} • curBeat: ${curBeat} • curStep: ${curStep}';
 	}
 
+	override function toString():String {
+		return Type.getClassName(Type.getClass(this));
+	}
+
+	private function updateSongPosition(?_:FlxSound):Void {
+		Conductor.update();
+		updateSteps();
+	}
+
+	private function updateSteps() {
+		var oldStep:Int = Conductor.curStep;
+		Conductor.updateSteps();
+		var curStep:Int = Conductor.curStep;
+
+		if (oldStep != curStep) {
+			if (curStep > 0) {
+				stepHit();
+				if (curStep % 4 == 0)
+					beatHit();
+			}
+
+			var prevSection:Int = curSection;
+
+			if (PlayState.SONG != null) {
+				if (oldStep < curStep)
+					updateSection();
+				else
+					rollbackSection();
+			}
+
+			if (curSection > prevSection)
+				sectionHit();
+		}
+	}
+
+	private function updateSection():Void
+	{
+		if (sectionEndStep < 1)
+			sectionEndStep = getStepsOnSection();
+		
+		while (curStep >= sectionEndStep) {
+			curSection++;
+			sectionEndStep += getStepsOnSection();
+			_sectionHit();
+		}
+	}
+
+	private function rollbackSection():Void
+	{
+		if (curStep < 0)
+			return;
+
+		var lastSection:Int = curSection;
+
+		////
+		curSection = 0;
+		sectionEndStep = getStepsOnSection();
+
+		while (curStep >= sectionEndStep) {
+			curSection++;
+			sectionEndStep += getStepsOnSection();
+		}
+
+		////
+		if (curSection > lastSection)
+			_sectionHit();
+	}
+
+	private function _sectionHit() {
+		var sectionData = PlayState.SONG.notes[curSection];
+		if (sectionData?.changeBPM)
+			Conductor.changeBPM(sectionData.bpm);
+	}
+
+	function resyncTracks() {
+		Conductor.resyncTracks();
+	}
+
+	inline function getStepsOnSection():Int
+	{		
+		var section = PlayState?.SONG.notes[curSection];
+		return section==null ? 16 : Math.round(Conductor.sectionSteps(section));
+	}
+
+	////
 	public static var curMusic:String = "";
 	public static var menuVox:FlxSound; // jukebox
 
@@ -338,7 +233,7 @@ class MusicBeatState extends FlxUIState
 	}
 
 	public static inline function isPlayingMusic(?key:String):Bool
-		return (key != null && key == curMusic) && FlxG.sound.music?.playing;
+		return (key == null || key == curMusic) && FlxG.sound.music?.playing;
 
 	public static function playMusic(key:String, force:Bool = false) {
 		if (!force && isPlayingMusic(key))
@@ -347,23 +242,76 @@ class MusicBeatState extends FlxUIState
 		
 		var md = MusicData.fromName(key);
 		if (md != null) {
-			FlxG.sound.music = md.play();
+			FlxG.sound.music = md.play(new FlxSound());
 			FlxG.sound.music.persist = true;
+			FlxG.sound.music.context = MUSIC;
+			FlxG.sound.defaultMusicGroup.add(FlxG.sound.music);
+
 			Conductor.changeBPM(md.bpm);
 		}else {
 			FlxG.sound.playMusic(Paths.music(key));
 		}
 
-		Conductor.songPosition = FlxG.sound.music.time;
+		Conductor.pitch = 1.0;
+		Conductor.tracks = [FlxG.sound.music];
+		Conductor.startSong(FlxG.sound.music.time);
 		curMusic = key;
 	}
 
 	// TODO: check the jukebox selection n shit and play THAT instead? idk lol
+	// ^ this was a TGT comment but re-adding the jukebox menu as part of freeplay would be nice I think
 	public static function playMenuMusic(force:Bool = false) {
 		if (!force && isPlayingMusic())
 			return;
 
 		MusicBeatState.playMusic('freakyMenu', true);
 		FlxG.sound.music.looped = true;
-	}	
+	}
+
+	public static function switchState(nextState:NextState)
+	{
+		FlxG.autoPause = false;
+		FlxG.mouse.visible = false;
+		Mouse.cursor = MouseCursor.AUTO;
+
+		FlxG.switchState(nextState); // just because im too lazy to goto every instance of switchState and change it to a FlxG call
+	}
+
+	public static function resetState(?skipTrans:Bool = false) {
+		if (skipTrans) {
+			TransitionableState.skipNextTransIn = true;
+			TransitionableState.skipNextTransOut = true;
+		}
+
+		#if SCRIPTABLE_STATES
+		if (FlxG.state is HScriptOverridenState) {
+			var state:HScriptOverridenState = cast FlxG.state;
+			FlxG.switchState(function() {
+				var overriden = HScriptOverridenState.fromAnother(state);	
+				if (overriden != null)
+					return overriden;
+
+				trace("State override script file is gone!", "Switching to", state.parentClass);
+				return Type.createInstance(state.parentClass, []);
+			});
+		} else
+		#end
+		if (FlxG.state is HScriptedState) {
+			var state:HScriptedState = cast FlxG.state;
+			FlxG.switchState(function() {
+				var nextState = HScriptedState.fromPath(state.scriptPath);
+				if (nextState != null)
+					return nextState;
+				
+				trace("State script file is gone!", "Switching to main menu");
+				return new funkin.states.MainMenuState();
+			});
+		}else
+			FlxG.resetState();
+	}
+
+	public static function getState():MusicBeatState
+	{
+		return cast FlxG.state;
+	}
 }

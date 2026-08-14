@@ -6,6 +6,7 @@ import funkin.input.Controls;
 import flixel.input.keyboard.FlxKey;
 import flixel.input.gamepad.FlxGamepadInputID;
 import flixel.util.FlxSave;
+import flixel.addons.ui.U as FlxU;
 #if DISCORD_ALLOWED
 import funkin.api.Discord.DiscordClient;
 #end
@@ -23,6 +24,16 @@ typedef OptionData = {
 	var type:OptionType;
 	var ?value:Dynamic;
 	var data:Map<String, Dynamic>;
+}
+
+private inline function getRefreshRate() {
+	#if macro
+	return 60;
+	#elseif linux
+	return funkin.api.Linux.getMonitorRefreshRate();
+	#else
+	return FlxG.stage?.application.window.displayMode.refreshRate ?? 60;
+	#end
 }
 
 #if !macro
@@ -258,8 +269,8 @@ class ClientPrefs {
 				display: "Sync Mode",
 				desc: "The method used to sync the music to the game.\nOnly touch this if your game is going off-sync.",
 				type: Dropdown,
-				value: "System Time",
-				data: ["options" => ["System Time", "Last Mix", "Psych 1.0", "Direct", "Legacy"]]
+				value: "Last Mix",
+				data: ["options" => ["System Time", "Last Mix", "Never2x", "Direct"]]
 			},
 			// UI
 			"timeBarType" => {
@@ -331,11 +342,25 @@ class ClientPrefs {
 				]
 			},
 			"simpleJudge" => {
-				display: "Alt Judgements",
-				desc: "Makes judgements pop in alot simpler and displays only one at a time.",
+				display: "Simple Judgements",
+				desc: "Judgements and combo pop in with a simple animation and only one judgement is displayed at a time",
 				value: false,
 				type: Toggle,
 				data: []
+			},
+			"comboStacking" => {
+				display: "Stack combos",
+				desc: "Whether combo sprites should stack.\nThis doesn't affect Simple Judgements.",
+				value: true,
+				type: Toggle,
+				data: [],
+			},
+			"comboFading" => {
+				display: "Fade combos",
+				desc: "Whether combo sprites should fade out, or stay on screen.\nDisabling this also disables combo stacking.",
+				value: true,
+				type: Toggle,
+				data: [],
 			},
 			"scoreZoom" => {
 				display: "Zoom On Hit",
@@ -440,6 +465,15 @@ class ClientPrefs {
 				desc: "When toggled, upon hitting a note it will show the millisecond timing.",
 				type: Toggle,
 				value: false,
+				data: []
+			},
+			"cancelReceptorAnims" => {
+				// TODO: Receptor animation behaviour, adding v-slice behavior-
+				// of playing the ghost tap animation when holding for too long (though you could maybe bake that into the spritesheet?)
+				display: "Cancel Receptor Animations",
+				desc: "When toggled, receptor animations will be cancelled when releasing a key instead of fully playing out.",
+				type: Toggle,
+				value: false, // suck it nerdssss
 				data: []
 			},
 			"hitbar" => {
@@ -611,9 +645,15 @@ class ClientPrefs {
 				display:"Max Framerate",
 				desc:"The highest framerate the game can hit.",
 				type:Number,
-				value:#if !macro FlxG.stage != null ? FlxG.stage.application.window.displayMode.refreshRate : #end
-				60,
-				data:["suffix" => " FPS", "min" => 5, "max" => 360, "step" => 1,]
+				value: ClientPrefs.getRefreshRate(),
+				data:["suffix" => " FPS", "min" => 10, "max" => 360, "step" => 1,]
+			},
+			"fieldFramerate" => {
+				display:"Notefield Framerate",
+				desc: "How many times per-second the notefield is rendered.\nRecommended to set this to your monitor's refresh rate.",
+				type:Number,
+				value: ClientPrefs.getRefreshRate(),
+				data:["suffix" => " FPS", "min" => 10, "max" => 360, "step" => 1,]
 			},
 			"lowQuality" => {
 				display: "Low Quality",
@@ -663,6 +703,12 @@ class ClientPrefs {
 			#end
 			"customizeKeybinds" => {
 				display: "Customize Key Bindings",
+				desc: "Lets you change your controls. Pretty straight forward, huh?",
+				type: Button,
+				data: []
+			},
+			"customizeButtonBinds" => {
+				display: "Customize Button Bindings",
 				desc: "Lets you change your controls. Pretty straight forward, huh?",
 				type: Button,
 				data: []
@@ -755,7 +801,7 @@ class ClientPrefs {
 	];
 
 	//
-	public static var arrowHSV:Array<Array<Int>> = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+	public static var arrowHSV:Array<Array<Int>> = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
 
 	/**
 	 * [0] and [1] for ratings.
@@ -796,7 +842,6 @@ class ClientPrefs {
 		'volume_mute' => [ZERO, NONE],
 		'volume_up' => [NUMPADPLUS, PLUS],
 		'volume_down' => [NUMPADMINUS, MINUS],
-		'fullscreen' => [F11, NONE],
 		'debug_1' => [SEVEN, NONE],
 		'debug_2' => [EIGHT, NONE],
 		'botplay' => [F8, NONE]
@@ -806,24 +851,62 @@ class ClientPrefs {
 		'note_down' => [A, DPAD_DOWN],
 		'note_up' => [Y, DPAD_UP],
 		'note_right' => [B, DPAD_RIGHT],
-		
 		'dodge' => [],
-
 		'pause' => [START],
 		'reset' => [],
-
 		'ui_left' => [DPAD_LEFT],
 		'ui_down' => [DPAD_DOWN],
 		'ui_up' => [DPAD_UP],
 		'ui_right' => [DPAD_RIGHT],
-
 		'accept' => [A],
 		'back' => [B],
 	];
 	public static var defaultKeys:Map<String, Array<FlxKey>> = null;
 	public static var defaultButtons:Map<String, Array<FlxGamepadInputID>> = null;
 
+	public static final keyDirections:Array<Array<FlxKey>> = [
+		[SPACE],
+		[F, J],
+		[F, SPACE, J],
+		[D, F, J, K],
+		[D, F, SPACE, J, K],
+		[S, D, F, J, K, L],
+		[S, D, F, SPACE, J, K, L],
+		[A, S, D, F, H, J, K, L],
+		[A, S, D, F, SPACE, H, J, K, L]
+	];
+
+	public static final buttonDirections:Array<Array<FlxGamepadInputID>> = [
+		[DPAD_UP],
+		[DPAD_LEFT, DPAD_RIGHT],
+		[DPAD_LEFT, DPAD_UP, DPAD_RIGHT],
+		[DPAD_LEFT, DPAD_DOWN, DPAD_UP, DPAD_RIGHT],
+		[DPAD_LEFT, DPAD_DOWN, RIGHT_SHOULDER, DPAD_UP, DPAD_RIGHT],
+		[DPAD_LEFT, DPAD_DOWN, DPAD_RIGHT, X, A, B],
+		[DPAD_LEFT, DPAD_DOWN, DPAD_RIGHT, RIGHT_SHOULDER, X, A, B],
+		[DPAD_LEFT, DPAD_DOWN, DPAD_UP, DPAD_RIGHT, X, A, Y, B],
+		[DPAD_LEFT, DPAD_DOWN, DPAD_UP, DPAD_RIGHT, RIGHT_SHOULDER, X, A, Y, B]
+	];
+
 	public static function loadDefaultKeys() {
+		final minKeyCount = funkin.objects.notes.Note.minKeyCount;
+		final maxKeyCount = funkin.objects.notes.Note.maxKeyCount;
+
+		for (i in minKeyCount - 1...maxKeyCount) {
+			for (j in 0...i + 1) {
+				keyBinds.set('${i + 1}_key_$j', [keyDirections[i][j]]);
+			}
+		}
+
+		for (i in minKeyCount - 1...maxKeyCount) {
+			for (j in 0...i + 1) {
+				buttonBinds.set('${i + 1}_key_$j', [buttonDirections[i][j]]);
+			}
+		}
+
+		FlxU.clearArraySoft(keyDirections);
+		FlxU.clearArraySoft(buttonDirections);
+
 		defaultKeys = keyBinds.copy();
 		defaultButtons = buttonBinds.copy();
 	}
@@ -831,12 +914,9 @@ class ClientPrefs {
 	static var optionSave:FlxSave = new FlxSave();
 
 	public static function initialize() {
-		#if linux
-		defaultOptionDefinitions.get("framerate").value = funkin.api.Linux.getMonitorRefreshRate();
-		#else
-		defaultOptionDefinitions.get("framerate").value = FlxG.stage.application.window.displayMode.refreshRate;
-		#end
-		
+		defaultOptionDefinitions.get("framerate").value = getRefreshRate();
+		defaultOptionDefinitions.get("fieldFramerate").value = getRefreshRate();
+
 		// locale = openfl.system.Capabilities.language;
 
 		optionSave.bind("options_v2");
@@ -854,10 +934,7 @@ class ClientPrefs {
 	public static function save(?definitions:Map<String, OptionData>) {
 		if (definitions != null) {
 			for (key => val in definitions) {
-				if (val.type == Number && val.data.exists("type") && val.data.get("type") == 'percent')
-					Reflect.setField(optionSave.data, key, val.value / 100);
-				else
-					Reflect.setField(optionSave.data, key, val.value);
+				Reflect.setField(optionSave.data, key, val.value);
 			}
 		} else
 			for (name in options)
@@ -914,6 +991,10 @@ class ClientPrefs {
 			if (Reflect.field(optionSave.data, name) != null)
 				Reflect.setField(ClientPrefs, name, Reflect.field(optionSave.data, name));
 
+		while (arrowHSV.length < 5) { // the stupid
+			arrowHSV.push([0, 0, 0]);
+		}
+
 		Paths.locale = ClientPrefs.locale;
 
 		if (Main.fpsVar != null) {
@@ -946,7 +1027,20 @@ class ClientPrefs {
 		FNFGame.muteKeys = copyKey(keyBinds.get('volume_mute'));
 		FNFGame.volumeDownKeys = copyKey(keyBinds.get('volume_down'));
 		FNFGame.volumeUpKeys = copyKey(keyBinds.get('volume_up'));
-		FNFGame.fullscreenKeys = copyKey(keyBinds.get("fullscreen"));
+	}
+
+	public static function getNoteKeys(keyCount:Int = 4):Array<Array<Int>>  {
+		return [
+			for (i in 0...keyCount)
+				copyKey(keyBinds.get('${keyCount}_key_${i}'))
+		];
+	}
+
+	public static function getNoteButtons(keyCount:Int = 4):Array<Array<Int>> {
+		return [
+			for (i in 0...keyCount)
+				copyKey(buttonBinds.get('${keyCount}_key_${i}'))
+		];
 	}
 
 	public static function copyKey(arrayToCopy:Array<Int>):Array<Int> {

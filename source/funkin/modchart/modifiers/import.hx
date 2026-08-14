@@ -3,8 +3,13 @@ package funkin.modchart.modifiers;
 import funkin.modchart.*;
 import funkin.modchart.Modifier;
 
+import Math.sin;
+import Math.cos;
+import Math.tan;
+
 import math.Vector3;
 import math.VectorHelpers;
+import math.CoolMath;
 
 import flixel.FlxSprite;
 import flixel.math.FlxAngle;

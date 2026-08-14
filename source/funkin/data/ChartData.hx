@@ -51,6 +51,7 @@ typedef SwagSong = {
 	var splashSkin:String;
 
 	////
+	@:optional var trollEngine:ChartVersion;
 	@:optional var events:Array<PsychEventNote>;
 	
 	//// internal
@@ -135,7 +136,7 @@ class ChartData
 		}catch(e) {
 			print(CrashHandler.callstackToString(haxe.CallStack.exceptionStack(true)));
 			trace('ERROR parsing song JSON: $filePath', e.message);
-			return null;
+			throw e;
 		}
 	}
 
@@ -163,7 +164,7 @@ class ChartData
 				}
 			}
 			songJson._path = filePath;
-			return onLoadLegacyJson(songJson);
+			return updateLegacyJson(songJson);
 		}else
 			songJson = cast uncastedJson.song;
 
@@ -195,28 +196,30 @@ class ChartData
 
 	public static function onLoadJson(songJson:JsonSong):SwagSong
 	{
-		////
+		var swagSong:SwagSong = updateChart(songJson);	
+		swagSong.validScore = true;
+		return swagSong;
+	}
+
+	public static function updateChart(songJson:JsonSong):SwagSong {
 		var swagSong:SwagSong;
-		var version:Null<ChartVersion> = Reflect.field(songJson, 'trollEngine');
-		trace('Loading chart version $version');
+		var version:Null<ChartVersion> = songJson.trollEngine;
 		switch(version) {
 			case null | LEGACY_FNF:
 				trace("Converting from LEGACY_FNF");
-				swagSong = onLoadLegacyJson(songJson);
+				return updateChart(cast updateLegacyJson(songJson));
 			case CURRENT:
+				trace('Loading chart version $version');
 				swagSong = songJson;
 			default:
 				swagSong = null;
 				throw 'Unknown chart version: $version';
 		}
 		
-		swagSong.validScore = true;
 		return swagSong;
 	}
 		
-	public static function onLoadLegacyJson(songJson:JsonSong):SwagSong {
-		var swagJson:SwagSong = songJson;
-
+	public static function updateLegacyJson(songJson:JsonSong):JsonSong {
 		////
 		songJson.stage ??= 'stage';
 		/*
@@ -228,11 +231,11 @@ class ChartData
 		// If gfVersion isn't set on the json file, use player3 or default to gf
 		songJson.gfVersion = !Reflect.hasField(songJson, 'gfVersion') ? (songJson.player3 ?? "gf") : songJson.gfVersion;
 		
-		if (swagJson.arrowSkin == null || swagJson.arrowSkin.trim().length == 0)
-			swagJson.arrowSkin = "NOTE_assets";
+		if (songJson.arrowSkin == null || songJson.arrowSkin.trim().length == 0)
+			songJson.arrowSkin = "NOTE_assets";
 
-		if (swagJson.splashSkin == null || swagJson.splashSkin.trim().length == 0)
-			swagJson.splashSkin = "noteSplashes";
+		if (songJson.splashSkin == null || songJson.splashSkin.trim().length == 0)
+			songJson.splashSkin = "noteSplashes";
 
 		songJson.hudSkin ??= 'default';
 
@@ -244,9 +247,9 @@ class ChartData
 			default: 4;
 		}
 
-		if (swagJson.notes == null || swagJson.notes.length == 0) {		
+		if (songJson.notes == null || songJson.notes.length == 0) {		
 			//// must have at least one section
-			swagJson.notes = [{
+			songJson.notes = [{
 				sectionNotes: [],
 				typeOfSection: 0,
 				mustHitSection: true,
@@ -258,11 +261,11 @@ class ChartData
 			}];
 			
 		}else {
-			onLoadEvents(swagJson);
+			onLoadEvents(songJson);
 	
 		////
 		var keyCount:Int = songJson.keyCount ?? 4;
-		for (section in swagJson.notes) {
+		for (section in songJson.notes) {
 			if (null == Reflect.field(section, "sectionBeats"))
 				section.sectionBeats = 4;
 			
@@ -275,14 +278,14 @@ class ChartData
 		}		
 		
 		//// new tracks system
-		if (swagJson.tracks == null) {
-			swagJson.tracks = makeTrackData(songJson);
-			trace(swagJson.tracks);
+		if (songJson.tracks == null) {
+			songJson.tracks = makeTrackData(songJson);
+			trace(songJson.tracks);
 		}
 
-		Reflect.setField(swagJson, "trollEngine", ChartVersion.CURRENT);
+		songJson.trollEngine = LEGACY_V1;
 
-		return swagJson;
+		return songJson;
 	}
 
 	public static function onLoadEvents(songJson:JsonEvents, checkPsych:Bool = true) {
@@ -371,9 +374,43 @@ class ChartData
 			return {inst: instTracks, player: [playerTrack], opponent: [opponentTrack]};
 		}
 	}
+
+	/** Return an array of strings related to the song's credits **/
+	public static function getMetadataInfo(metadata:SongMetadata):Array<String> {
+		var info:Array<String> = [];
+		
+		inline function pushInfo(str:String) {
+			for (string in str.split('\n'))
+				info.push(string);
+		}
+
+		if (metadata != null) {
+			if (metadata.artist != null && metadata.artist.length > 0)		
+				pushInfo("Artist: " + metadata.artist);
+
+			if (metadata.charter != null && metadata.charter.length > 0)
+				pushInfo("Chart: " + metadata.charter);
+
+			if (metadata.modcharter != null && metadata.modcharter.length > 0)
+				pushInfo("Modchart: " + metadata.modcharter);
+		}
+
+		if (metadata != null && metadata.extraInfo != null) {
+			for (extraInfo in metadata.extraInfo)
+				pushInfo(extraInfo);
+		}
+
+		return info;
+	}
 }
 
-abstract NoteData(Array<Dynamic>)// from Array<Dynamic> to Array<Dynamic>
+abstract ChartObject(Array<Dynamic>) to Array<Dynamic> from Array<Dynamic> {
+	public var strumTime(get, set):Float;
+	inline function get_strumTime() return this[0];
+	inline function set_strumTime(value:Float) return this[0] = value;
+}
+
+abstract NoteData(Array<Dynamic>) to Array<Dynamic> to ChartObject
 {
 	public var strumTime(get, set):Float;
 	public var column(get, set):Int;
@@ -421,10 +458,10 @@ abstract NoteData(Array<Dynamic>)// from Array<Dynamic> to Array<Dynamic>
 	}
 
 	public static function isNoteData(data:Array<Dynamic>):Bool
-		return data != null && Std.isOfType(data[0], Float) && Std.isOfType(data[1], Int) && data[1] > 0;
+		return data != null && Std.isOfType(data[0], Float) && Std.isOfType(data[1], Int) && data[1] >= 0;
 }
 
-abstract PsychEventNote(Array<Dynamic>)// from Array<Dynamic> to Array<Dynamic>
+abstract PsychEventNote(Array<Dynamic>) to ChartObject// from Array<Dynamic> to Array<Dynamic>
 {
 	public var strumTime(get, set):Float;
 	public var subEventsData(get, set):Array<PsychSubEventData>;

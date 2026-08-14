@@ -1,5 +1,6 @@
 package funkin.objects.notes;
 
+import funkin.states.editors.ChartingState;
 import funkin.states.PlayState;
 import funkin.objects.playfields.PlayField;
 import funkin.scripts.FunkinHScript;
@@ -9,30 +10,43 @@ import funkin.objects.shaders.NoteColorSwap;
 using StringTools;
 #end
 
+private typedef NoteScriptState = {
+	var notetypeScripts:Map<String, FunkinHScript>;
+	function getHudSkinScript(name:String):Null<FunkinHScript>;
+}
+
 // honestly we should make it so you can attach a hscript to receptors and type-less notes
 // maybe notetypes/default.hx and notetypes/receptor.hx
 // idk lol i'll explore it more once i get around to making skins/assetpacks (resource packs but troll engine)
-
-class StrumNote extends NoteObject
-{
-	public static var defaultStaticAnimNames:Array<String> = ['arrowLEFT', 'arrowDOWN', 'arrowUP', 'arrowRIGHT'];
-	public static var defaultPressAnimNames:Array<String> = ["left press", "down press", "up press", "right press"];
-	public static var defaultConfirmAnimNames:Array<String> = ["left confirm", "down confirm", "up confirm", "right confirm"];
-
+class StrumNote extends NoteObject {
 	////
 	public var texture(default, set):String = null;
 	public var downScroll:Bool = false;
 	public var isQuant:Bool = false;
+	public var canQuant:Bool = true;
+
+	/**
+		Reset animation timer.  
+		If higher than 0, the animation will reset to 'static' once it reaches 0.  
+		If lower than 0, the animation will reset to 'static' once the current animation finishes.
+	**/
 	public var resetAnim:Float = 0;
+
+	public var field:PlayField;
 
 	////
 	public var noteMod(default, set):String;
 	public var genScript:FunkinHScript;
 
+	public var tex:String = '';
+	public var texSuffix:String = '';
+
 	////
 	public var z:Float = 0;
 
-	private var field:PlayField;
+	var instance(get, never):NoteScriptState;
+	inline function get_instance():NoteScriptState
+		return ChartingState.instance != null ? ChartingState.instance : PlayState.instance;
 
 	public function new(x:Float, y:Float, leColumn:Int, ?playField:PlayField, ?hudSkin:String = 'default') {
 		super(STRUM);
@@ -41,6 +55,7 @@ class StrumNote extends NoteObject
 		shader = NoteColorSwap.shader;
 
 		column = leColumn;
+		canQuant = ClientPrefs.noteSkin == "Quants";
 		field = playField;
 		noteMod = hudSkin;
 	}
@@ -57,7 +72,7 @@ class StrumNote extends NoteObject
 	}
 
 	function set_noteMod(value:String) {
-		genScript = (PlayState.instance == null) ? null : PlayState.instance.getHudSkinScript(value);
+		genScript = instance?.getHudSkinScript(value);
 
 		if (genScript == null) {
 			texture = PlayState.arrowSkin;
@@ -80,38 +95,55 @@ class StrumNote extends NoteObject
 		return noteMod = value;
 	}
 
-	public function reloadNote()
-	{
-		// TODO: add indices support n shit
+	public function reloadNote(texture:String = '', suffix:String = '', folder:String = '') {
+		tex = texture;
+		texSuffix = suffix;
 
-		var textureKey:String;
+		inline function getTextureKey() { // copied from Note, comments are there.
+			var folderPath:String = (folder.length == 0) ? folder : '$folder/';
+			var fileName:String = (texture.length > 0) ? texture : PlayState.arrowSkin;
 
-		if (ClientPrefs.noteSkin == 'Quants') {
-			var split = texture.split('/');
-			var fileName = split.pop();
-			var folderPath = split.join('/') + '/';
+			var split:Int = fileName.lastIndexOf('/');
+			if (split != -1) {
+				var fap:String = fileName.substr(split + 1);
+				if (fap.length > 0) folderPath += '$fap/';
+				fileName = fileName.substr(0, split) + suffix;
+			} else
+				fileName = fileName + suffix;
 
-			textureKey = Note.getQuantTexture(folderPath, fileName, texture);
-			if (textureKey != null) isQuant = true;
-			else textureKey = texture;
+			var key:Null<String> = null;
+			this.isQuant = false;
 
-		}else
-			textureKey = texture;
+			inline function checkFolder(dir:String) {
+				final normalKey:String = dir + fileName;
+				var quantKey:Null<String> = null;
+				this.isQuant = this.canQuant && (null != (quantKey = Note.getQuantTexture(dir, fileName, normalKey)));
+				key = (!this.isQuant && Paths.imageExists(normalKey)) ? normalKey : quantKey;
+			}
 
-		var lastAnim:String = animation.name;
-		if (lastAnim == null) lastAnim = 'static';
+			if (folderPath.length != 0)
+				checkFolder(folderPath);
 
-		frames = Paths.getSparrowAtlas(textureKey);
+			if (key == null)
+				checkFolder('');
 
-		animation.addByPrefix('static', defaultStaticAnimNames[column], 24, false);
-		animation.addByPrefix('pressed', defaultPressAnimNames[column], 24, false);
-		animation.addByPrefix('confirm', defaultConfirmAnimNames[column], 24, false);
+			return key;
+		}
 
-		playAnim(lastAnim, true);
+		var textureKey:String = getTextureKey();
+		frames = Paths.sparrowAtlas(textureKey);
+		frames != null ? loadNoteAnims() : loadGraphic(Paths.image(textureKey));
 
 		scale.x = scale.y = Note.spriteScale;
 		defScale.copyFrom(scale);
 		updateHitbox();
+	}
+
+	public function loadNoteAnims() {
+		animation.addByPrefix('static', currentAnimations.staticAnimations[column % currentAnimations.staticAnimations.length], 24, false);
+		animation.addByPrefix('pressed', currentAnimations.pressAnimations[column % currentAnimations.pressAnimations.length], 24, false);
+		animation.addByPrefix('confirm', currentAnimations.confirmAnimations[column % currentAnimations.confirmAnimations.length], 24, false);
+		playAnim('static');
 	}
 
 	public function postAddedToGroup()

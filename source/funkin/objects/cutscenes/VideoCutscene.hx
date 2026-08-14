@@ -3,7 +3,6 @@ package funkin.objects.cutscenes;
 // idc to do hxcodec etc lmao!
 #if hxvlc
 import hxvlc.flixel.FlxVideoSprite;
-import hxvlc.util.Location;
 #else
 typedef FlxVideoSprite = Dynamic;
 #end
@@ -14,21 +13,24 @@ class VideoCutscene extends Cutscene {
 
 	#if VIDEOS_ALLOWED
 	public override function createCutscene() {
-		video = new FlxVideoSprite(0, 0);
+		video = new FlxVideoSprite();
+		video.cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
+
 		video.bitmap.onEndReached.add(() -> {
 			onEnd.dispatch(false);
 		});
-		
-		video.bitmap.onFormatSetup.add(()-> { 
+
+		video.bitmap.onFormatSetup.add(() -> 
+		{
 			video.setGraphicSize(FlxG.width, FlxG.height);
-			video.cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
-			video.screenCenter(XY);
+			video.updateHitbox();
+			video.screenCenter();
 		});
-		
+
 		onEnd.addOnce(onEndCutscene);
 		add(video);
 
-		var videoLocation:Location = Paths.video(videoId);
+		var videoLocation:String = Paths.video(videoId);
 		var videoLoaded:Bool = video.load(videoLocation);
 		if (videoLoaded) {
 			video.play();

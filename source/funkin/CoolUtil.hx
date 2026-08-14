@@ -1,8 +1,9 @@
 package funkin;
 
 import funkin.data.BaseSong;
+
+import funkin.util.FileUtil;
 import haxe.io.Bytes;
-import haxe.io.Path;
 
 import math.CoolMath;
 
@@ -11,22 +12,13 @@ import flixel.util.FlxColor;
 import flixel.tweens.FlxEase;
 import flixel.util.typeLimit.OneOfTwo;
 
-#if sys
-import sys.io.File;
-import sys.FileSystem;
-#end
-#if linc_filedialogs
-import filedialogs.FileDialogs;
-#else
-import lime.ui.FileDialog;
-import openfl.net.FileFilter;
-#end
-
 using StringTools;
 
 /**
 	Class for various util functions.  
-	Math function shall go to `CoolMath`
+
+	Math functions shall go to `CoolMath`  
+	File functions shall go to `FileUtil`  
 **/
 class CoolUtil {
 	public static function makeSound(asset:flixel.system.FlxAssets.FlxSoundAsset) {
@@ -146,8 +138,9 @@ class CoolUtil {
 	}
 
 	////
-	inline public static function blankSprite(width, height, color=0xFFFFFFFF) {
-		var spr = new FlxSprite().makeGraphic(1, 1);
+	inline public static function blankSprite(width:Float, height:Float, color=0xFFFFFFFF) {
+		var spr = new FlxSprite();
+		spr.frame = Paths.whitePixel;
 		spr.scale.set(width, height);
 		spr.updateHitbox();
 		spr.color = color;
@@ -184,6 +177,8 @@ class CoolUtil {
 	}
 
 	@:noCompletion static var _point:FlxPoint = new FlxPoint();
+
+	/** @returns Whether if the mouse is hovering over an object, respecting the camera view bounds **/
 	public static function overlapsMouse(object:FlxObject, ?camera:FlxCamera):Bool
 	{
 		camera ??= FlxG.camera;
@@ -195,6 +190,12 @@ class CoolUtil {
 		}
 
 		return false;
+	}
+
+	/** @returns Whether the mouse is hovering over a camera's view bounds **/
+	public static function mouseOverlapsCamera(camera:FlxCamera):Bool {
+		FlxG.mouse.getPositionInCameraView(camera, _point);
+		return camera.containsPoint(_point);
 	}
 
 	public static function centerOnObject(obj1:FlxObject, obj2:FlxObject) {
@@ -219,10 +220,7 @@ class CoolUtil {
 	public static function coolTextFile(path:String):Array<String>
 	{
 		var rawList = Paths.getContent(path);
-		if (rawList == null)
-			return [];
-
-		return listFromString(rawList);
+		return (rawList == null) ? [] : listFromString(rawList);
 	}
 
 	public static function dominantColor(sprite:flixel.FlxSprite):FlxColor {
@@ -254,14 +252,14 @@ class CoolUtil {
 	}
 
 	////
-	public static function colorFromString(color:String):FlxColor
+	public static function colorFromString(str:String):FlxColor
 	{
-		return FlxColor.fromRGB(
-			Std.parseInt("0x"+color.substr(-6, 2)),
-			Std.parseInt("0x"+color.substr(-4, 2)),
-			Std.parseInt("0x"+color.substr(-2, 2)),
-			Std.parseInt("0x"+color.substr(-8, 2))
-		);
+		var r = Std.parseInt("0x"+str.substr(-6, 2));
+		var g = Std.parseInt("0x"+str.substr(-4, 2));
+		var b = Std.parseInt("0x"+str.substr(-2, 2));
+		var a = (str.length < 6) ? 255 : Std.parseInt("0x"+str.substr(-8, 2));
+
+		return FlxColor.fromRGB(r, g, b, a);
 	}
 
 	// could probably use a macro
@@ -311,179 +309,88 @@ class CoolUtil {
 		}
 	}
 
-	inline public static function numberArray(max:Int, ?min = 0):Array<Int>
-	{
-		// max+1 because in haxe for loops stop before reaching the max number
-		return [for (n in min...max+1){n;}];
-	}
-
-	//uhhhh does this even work at all? i'm starting to doubt
-	public static function precacheSound(sound:String, ?library:String = null):Void {
-		Paths.sound(sound, library);
-	}
-
-	public static function precacheMusic(sound:String, ?library:String = null):Void {
-		Paths.music(sound, library);
-	}
-
-	public static function browserLoad(site:String) {
-		#if linux
-		Sys.command('/usr/bin/xdg-open', [site]);
-		#else
+	public static inline function browserLoad(site:String) {
 		flixel.FlxG.openURL(site);
-		#end
 	}
 
-	public static function safeSaveFile(path:String, content:OneOfTwo<String, Bytes>):Bool {
-		#if sys
-		try {
-			FileSystem.createDirectory(Path.directory(path));
-			if (content is Bytes)
-				File.saveBytes(path, content);
-			else
-				File.saveContent(path, content);
-			return true;
+	// https://community.haxe.org/t/clone-a-class-instance/3747/5
+	// shoutout random guy on haxe fourm
+    public static function copyClass<T>(c:T):T {
+        var cls:Class<T> = Type.getClass(c);
+        var inst:T = Type.createEmptyInstance(cls);
+        var fields = Type.getInstanceFields(cls);
+
+        for (field in fields) {
+            var val:Dynamic = Reflect.field(c,field);
+            if (!Reflect.isFunction(val)) {
+                if (val is Array) {
+                    Reflect.setField(inst,field,val.copy()); // WHAT THE FUCK HAXE??
+                }
+                else{
+                    Reflect.setField(inst,field,val);
+                }
+            }
+        }
+        return inst;
+    }
+
+	public static function formatMemory(Bytes:Float):String {
+		var units:Int = 0;
+		while (Bytes >= 1024) {
+			Bytes /= 1024;
+			units++;
 		}
-		catch(e) {
-			final errMsg:String = 'Error while trying to save the file: ${Std.string(e).replace('\n', ' ')}';
-			trace(errMsg);
-		}
-		#end
 
-		return false;
-	}
-
-	@:noCompletion
-	private static inline function _filefilters(?filters:Array<String>) {
-		#if linc_filedialogs
-		return filters ?? [];
-		#else		
-		final goodFilters:Array<String> = [];
-		if (filters != null) {
-			for (f in filters) {
-				var type = new FileFilter(f, f);
-				goodFilters.push(StringTools.replace(StringTools.replace(type.extension, "*.", ""), ";", ","));
-			}
-		}
-		return goodFilters.join(";");
-		#end
-	}
-
-	/**
-		Normalize a path to be used by the the file system.
-
-		On Windows, slashes `/` are replaced by backslashes `\`
-		
-		If `path` is `null`, or if the resulting path doesn't exist, the current working directory is returned.
-
-		@param path File path, can be relative or absolute.
-		@return An absolute path to be used in system functions.
-	**/
-	public static inline function getSystemPath(?path:String):String {
-		#if sys
-		if (path == null || path.length == 0)
-			return Sys.getCwd();
-		if (!Path.isAbsolute(path))
-			path = Path.normalize(Path.addTrailingSlash(Sys.getCwd()) + path);
-		
-		if (!FileSystem.exists(Path.directory(path)))
-			path = Sys.getCwd();
-		#if windows else
-			path = path.replace('/', '\\');
-		#end
-
-		return path;
-		#else
-		return "";
-		#end
-	}
-
-	public static function showOpenMultipleDialog(title:String = "Open Files", ?defaultPath:String, ?filters:Array<String>, ?onSelect:(paths:Array<String>)->Void, ?onCancel:Void->Void):Void {
-		final filters = _filefilters(filters);
-		final defaultPath = getSystemPath(defaultPath);
-		#if linc_filedialogs
-		final files:Array<String> = FileDialogs.open_file(title, cast defaultPath, cast filters, Option.Multiselect);
-		if (files.length == 0) {
-			if (onCancel != null) onCancel();
-		}else {
-			if (onSelect != null) onSelect(files);
-		}
-		#else
-		final dialog:FileDialog = new FileDialog();
-		if (onCancel != null) dialog.onCancel.add(onCancel);
-		if (onSelect != null) dialog.onSelectMultiple.add(onSelect);
-		dialog.browse(OPEN_MULTIPLE, filters, defaultPath, title);
-		Sys.sleep(0.5); // sleep to prevent dialogs sometimes not opening if opened in quick succession
-		#end
-	}
-	
-	public static function showOpenDialog(title:String = "Open File", ?defaultPath:String, ?filters:Array<String>, ?onOpen:(bytes:Bytes)->Void, ?onSelect:(path:String)->Void, ?onCancel:Void->Void):Void {
-		final filters = _filefilters(filters);
-		final defaultPath = getSystemPath(defaultPath);
-		#if linc_filedialogs
-		final files:Array<String> = FileDialogs.open_file(title, cast defaultPath, cast filters, Option.None);
-		if (onSelect != null) onSelect(files[0]);
-		if (files.length == 0) {
-			if (onCancel != null) onCancel();
-		}else {
-			if (onOpen != null) onOpen(File.getBytes(files[0]));
-		}
-		#else
-		final dialog:FileDialog = new FileDialog();
-		if (onOpen != null) dialog.onOpen.add(onOpen);
-		if (onCancel != null) dialog.onCancel.add(onCancel);
-		if (onSelect != null) dialog.onSelect.add(onSelect);
-		dialog.browse(OPEN, filters, defaultPath, title);
-		Sys.sleep(0.5); // sleep to prevent dialogs sometimes not opening if opened in quick succession
-		#end
-	}
-
-	public static function showSaveDialog(content:OneOfTwo<String, Bytes>, title:String = "Save File", ?defaultPath:String, ?filters:Array<String>, ?onSave:(path:String)->Void, ?onCancel:Void->Void):Void {
-		final filters = _filefilters(filters);
-		final defaultPath = getSystemPath(defaultPath);
-		#if linc_filedialogs
-		final savePath:String = FileDialogs.save_file(title, cast defaultPath, cast filters);
-		if (savePath.length == 0) {
-			if (onCancel != null) onCancel();
-		}else {
-			var success:Bool = safeSaveFile(savePath, content);
-			if (success && onSave != null) onSave(savePath);
-		}
-		#else
-		final dialog:FileDialog = new FileDialog();
-		dialog.onSelect.add((f) -> safeSaveFile(f, content));
-		if (onCancel != null) dialog.onCancel.add(onCancel);
-		if (onSave != null) dialog.onSelect.add(onSave);
-		dialog.browse(SAVE, filters, defaultPath, title);
-		Sys.sleep(0.5); // sleep to prevent dialogs sometimes not opening if opened in quick succession
-		#end
+		return Math.fround(Bytes * 100) / 100 + switch (units) {
+			case 0: "Bytes";
+			case 1: "kB";
+			case 2: "MB";
+			default: "GB";
+		};
 	}
 
 	////
-	@:noCompletion inline public static function coolLerp(current:Float, target:Float, elapsed:Float):Float
+	#if ALLOW_DEPRECATION
+	@:deprecated @:noCompletion inline public static function safeSaveFile(path:String, content:OneOfTwo<String, Bytes>):Bool
+		return FileUtil.safeSaveFile(path, content);
+
+	@:deprecated @:noCompletion inline public static function getSystemPath(?path:String):String
+		return FileUtil.getSystemPath(path);
+
+	@:deprecated @:noCompletion inline public static function showOpenMultipleDialog(title:String = "Open Files", ?defaultPath:String, ?filters:Array<String>, ?onSelect:(paths:Array<String>)->Void, ?onCancel:Void->Void):Void
+		return FileUtil.showOpenMultipleDialog(title, defaultPath, filters, onSelect, onCancel);
+	
+	@:deprecated @:noCompletion inline public static function showOpenDialog(title:String = "Open File", ?defaultPath:String, ?filters:Array<String>, ?onOpen:(bytes:Bytes)->Void, ?onSelect:(path:String)->Void, ?onCancel:Void->Void):Void
+		return FileUtil.showOpenDialog(title, defaultPath, filters, onOpen, onSelect, onCancel);
+
+	@:deprecated @:noCompletion inline public static function showSaveDialog(content:OneOfTwo<String, Bytes>, title:String = "Save File", ?defaultPath:String, ?filters:Array<String>, ?onSave:(path:String)->Void, ?onCancel:Void->Void):Void
+		return FileUtil.showSaveDialog(content, title, defaultPath, filters, onSave, onCancel);
+
+	@:deprecated @:noCompletion inline public static function coolLerp(current:Float, target:Float, elapsed:Float):Float
 		return CoolMath.coolLerp(current, target, elapsed);
 
-	@:noCompletion inline public static function scale(x:Float, lower1:Float, higher1:Float, lower2:Float, higher2:Float):Float
+	@:deprecated @:noCompletion inline public static function scale(x:Float, lower1:Float, higher1:Float, lower2:Float, higher2:Float):Float
 		return CoolMath.scale(x, lower1, higher1, lower2, higher2);
 
-	@:noCompletion inline public static function quantizeAlpha(f:Float, interval:Float):Float
+	@:deprecated @:noCompletion inline public static function quantizeAlpha(f:Float, interval:Float):Float
 		return CoolMath.quantizeAlpha(f, interval);
 
-	@:noCompletion inline public static function quantize(f:Float, snap:Float):Float
+	@:deprecated @:noCompletion inline public static function quantize(f:Float, snap:Float):Float
 		return CoolMath.quantize(f, snap);
 
-	@:noCompletion inline public static function snap(f:Float, snap:Float):Float
+	@:deprecated @:noCompletion inline public static function snap(f:Float, snap:Float):Float
 		return CoolMath.snap(f, snap);
 
-	@:noCompletion inline public static function boundTo(value:Float, min:Float, max:Float):Float
+	@:deprecated @:noCompletion inline public static function boundTo(value:Float, min:Float, max:Float):Float
 		return CoolMath.boundTo(value, min, max);
 
-	@:noCompletion inline public static function clamp(n:Float, lower:Float, higher:Float):Float
+	@:deprecated @:noCompletion inline public static function clamp(n:Float, lower:Float, higher:Float):Float
 		return CoolMath.clamp(n, lower, higher);
 
-	@:noCompletion inline public static function floorDecimal(value:Float, decimals:Int):Float
+	@:deprecated @:noCompletion inline public static function floorDecimal(value:Float, decimals:Int):Float
 		return CoolMath.floorDecimal(value, decimals);
 
-	@:noCompletion inline public static function rotate(x:Float, y:Float, rads:Float, ?point:FlxPoint):FlxPoint
+	@:deprecated @:noCompletion inline public static function rotate(x:Float, y:Float, rads:Float, ?point:FlxPoint):FlxPoint
 		return CoolMath.rotate(x, y, rads, point);
+	#end
 }

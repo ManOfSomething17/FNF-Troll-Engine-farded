@@ -3,7 +3,7 @@ package funkin;
 import funkin.scripts.Globals;
 import funkin.states.base.MusicBeatState;
 
-import flixel.addons.transition.FlxTransitionableState;
+import funkin.states.base.TransitionableState;
 import flixel.util.typeLimit.NextState;
 import flixel.input.keyboard.FlxKey;
 
@@ -20,7 +20,6 @@ class FNFGame extends FlxGame
 	public static var muteKeys:Array<FlxKey> = [FlxKey.ZERO];
 	public static var volumeDownKeys:Array<FlxKey> = [FlxKey.NUMPADMINUS, FlxKey.MINUS];
 	public static var volumeUpKeys:Array<FlxKey> = [FlxKey.NUMPADPLUS, FlxKey.PLUS];
-	public static var fullscreenKeys:Array<FlxKey> = [FlxKey.F11];
 	public static var specialKeysEnabled(default, set):Bool;
 
 	public function new(gameWidth = 0, gameHeight = 0, ?initialState:InitialState, updateFramerate = 60, drawFramerate = 60, skipSplash = false, ?startFullscreen:Bool)
@@ -29,9 +28,6 @@ class FNFGame extends FlxGame
 		startFullscreen = startFullscreen ?? FlxG.save.data.fullscreen;
 
 		super(gameWidth, gameHeight, initialState, updateFramerate, drawFramerate, skipSplash, startFullscreen);
-		#if FLX_SOUND_TRAY
-		_customSoundTray = flixel.system.ui.DefaultFlxSoundTray;
-		#end
 
 		FlxG.sound.volume = FlxG.save.data.volume;
 		FlxG.mouse.useSystemCursor = true;
@@ -53,52 +49,41 @@ class FNFGame extends FlxGame
 			openfl.events.FullScreenEvent.FULL_SCREEN, 
 			(e) -> FlxG.save.data.fullscreen = e.fullScreen
 		);
-
-		////
-		#if CRASH_HANDLER
-		CrashHandler.init();
-		#end
 	}
 
 	private function _onKeyPress(e:KeyboardEvent) {
-		#if (windows || linux) // No idea if this also applies to any other targets
-		// Prevent Flixel from listening to key inputs when pressing Alt+Enter
-		if (e.altKey && e.keyCode == FlxKey.ENTER)
-			e.stopImmediatePropagation();
-		#end
+		switch (e.keyCode:FlxKey) {
+			#if (windows || linux) // No idea if this also applies to any other targets
+			case ENTER:
+				// Prevent Flixel from listening to key inputs when pressing Alt+Enter
+				if (e.altKey)
+					e.stopImmediatePropagation();
+			#end
+			case F11:
+				FlxG.fullscreen = !FlxG.fullscreen;
+			case F3:
+				if (!Main.fpsVar.visible) {
+					Main.fpsVar.visible = true;
+					Main.fpsVar.showDebug = false;
+				}else if (!Main.fpsVar.showDebug) {
+					Main.fpsVar.showDebug = true;
+				}else {
+					Main.fpsVar.visible = false;
+					Main.fpsVar.showDebug = false;
+				}
+			case F5:
+				if (e.shiftKey) {
+					funkin.Paths.clearStoredMemory();
+					funkin.Paths.clearUnusedMemory();
 
-		// Also add F11 to switch fullscreen mode
-		if (specialKeysEnabled && fullscreenKeys.contains(e.keyCode))
-			FlxG.fullscreen = !FlxG.fullscreen;
-
-		if (e.keyCode == FlxKey.F3) {
-			if (!Main.fpsVar.visible) {
-				Main.fpsVar.visible = true;
-				Main.fpsVar.showDebug = false;
-			}else if (!Main.fpsVar.showDebug) {
-				Main.fpsVar.showDebug = true;
-			}else {
-				Main.fpsVar.visible = false;
-				Main.fpsVar.showDebug = false;
-			}
-		}
-	}
-
-	override function update():Void
-	{
-		super.update();
-
-		if (FlxG.keys.justPressed.F5) {
-			if (FlxG.keys.pressed.SHIFT) {
-				funkin.Paths.clearStoredMemory();
-				funkin.Paths.clearUnusedMemory();
-				FlxTransitionableState.skipNextTransIn = true;
-				FlxTransitionableState.skipNextTransOut = true;
-				if (_state != null) _state.visible = false;
-				MusicBeatState.switchState(new funkin.states.MainMenuState());
-			}else {
-				MusicBeatState.resetState();
-			}
+					if (_state != null) _state.visible = false;
+					TransitionableState.skipNextTransIn = true;
+					TransitionableState.skipNextTransOut = true;
+					MusicBeatState.switchState(() -> new funkin.states.MainMenuState());
+				}else {
+					MusicBeatState.resetState();
+				}
+			default:
 		}
 	}
 

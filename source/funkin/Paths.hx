@@ -83,6 +83,9 @@ class Paths
 		'assets/images/Garlic-Bread-PNG-Images.$IMAGE_EXT'
 	];
 	public static var graphicDumpExclusions:Array<FlxGraphic> = [];
+	public static var soundDumpExclusions:Array<Sound> = [];
+
+	public static var whitePixel:flixel.graphics.frames.FlxFrame;
 
 	public static function excludeAsset(key:String)
 	{
@@ -91,7 +94,16 @@ class Paths
 	}
 
 	public static function init() {
-		#if !FILESYSTEM_ALLOWED
+		{ //ACTUAL white pixel, instead of 10x10 white pixels fuck flixel piece of shit good for nothing
+			var bd = new BitmapData(1, 1, true, 0xFFFFFFFF);
+			var graphic:FlxGraphic = FlxG.bitmap.add(bd, true, "whitePixel");
+			graphic.persist = true;
+			whitePixel = graphic.imageFrame.frame;
+			graphicDumpExclusions.push(graphic);
+		}
+		graphicDumpExclusions.push(FlxG.bitmap.whitePixel.parent);
+
+		#if READ_EMBEDDED_ASSETS
 		AltFilePaths.initPaths();
 		#end
 
@@ -151,7 +163,7 @@ class Paths
 		// clear anything not in the tracked assets list
 		@:privateAccess
 		for (key => obj in FlxG.bitmap._cache) {
-			if (obj != null && !currentTrackedAssets.exists(key) && !graphicDumpExclusions.contains(obj)) {
+			if (obj != null && !currentTrackedAssets.exists(key) && !graphicDumpExclusions.contains(obj) && !dumpExclusions.contains(key)) {
 				// trace('cleared $key');
 				destroyGraphic(obj);
 			}
@@ -159,7 +171,7 @@ class Paths
 
 		// clear all sounds that are cached
 		for (key => obj in currentTrackedSounds) {
-			if (obj != null && !localTrackedAssets.contains(key) && !dumpExclusions.contains(key)) {
+			if (obj != null && !localTrackedAssets.contains(key) && !soundDumpExclusions.contains(obj) && !dumpExclusions.contains(key)) {
 				Assets.cache.removeSound(key);
 				currentTrackedSounds.remove(key);
 			}
@@ -266,38 +278,58 @@ class Paths
 
 	inline static public function exists(path:String, ?type:AssetType):Bool {
 		#if FILESYSTEM_ALLOWED 
-		return FileSystem.exists(path);
-		#else
-		return Assets.exists(path, type);
+		if (FileSystem.exists(path))
+			return true;
 		#end
+		#if READ_EMBEDDED_ASSETS
+		if (Assets.exists(path, type))
+			return true;
+		#end
+		return false;
 	}
 	inline static public function getContent(path:String):Null<String> {
 		#if FILESYSTEM_ALLOWED
-		return FileSystem.exists(path) ? File.getContent(path) : null;
-		#else
-		return Assets.exists(path) ? Assets.getText(path) : null;
+		if (FileSystem.exists(path))
+			return File.getContent(path);
 		#end
+		#if READ_EMBEDDED_ASSETS
+		if (Assets.exists(path))
+			return Assets.getText(path);
+		#end
+		return null;
 	}
 	inline static public function getBytes(path:String):Null<haxe.io.Bytes> {
 		#if FILESYSTEM_ALLOWED
-		return FileSystem.exists(path) ? File.getBytes(path) : null;
-		#else
-		return Assets.exists(path) ? Assets.getBytes(path) : null;
+		if (FileSystem.exists(path))
+			return File.getBytes(path);
 		#end
+		#if READ_EMBEDDED_ASSETS
+		if (Assets.exists(path))
+			return Assets.getBytes(path);
+		#end
+		return null;
 	}
 	inline static public function isDirectory(path:String):Bool {
 		#if FILESYSTEM_ALLOWED
-		return FileSystem.exists(path) && FileSystem.isDirectory(path);
-		#else
-		return AltFilePaths.isDirectory(path);
+		if (FileSystem.exists(path))
+			return FileSystem.isDirectory(path);
 		#end
+		#if READ_EMBEDDED_ASSETS
+		if (AltFilePaths.isDirectory(path))
+			return true;
+		#end
+		return false;
 	}
 	inline static public function getDirectoryFileList(path:String):Array<String> {
 		#if FILESYSTEM_ALLOWED
-		return !isDirectory(path) ? [] : FileSystem.readDirectory(path);
-		#else
-		return AltFilePaths.getDirectoryFileList(path);
+		if (FileSystem.isDirectory(path))
+			return FileSystem.readDirectory(path);
 		#end
+		#if READ_EMBEDDED_ASSETS
+		if (AltFilePaths.isDirectory(path))
+			return AltFilePaths.getDirectoryFileList(path);
+		#end
+		return [];
 	}
 
 	inline public static function getText(path:String):Null<String> {
@@ -306,8 +338,10 @@ class Paths
 			return File.getContent(path);
 		#end
 
+		#if READ_EMBEDDED_ASSETS
 		if (Assets.exists(path))
 			return Assets.getText(path);
+		#end
 
 		return null;
 	}
@@ -317,8 +351,10 @@ class Paths
 			return BitmapData.fromFile(path);
 		#end
 
+		#if READ_EMBEDDED_ASSETS
 		if (Assets.exists(path, IMAGE))
 			return Assets.getBitmapData(path);
+		#end
 
 		return null;
 	}
@@ -328,43 +364,72 @@ class Paths
 			return Sound.fromFile(path);
 		#end
 
+		#if READ_EMBEDDED_ASSETS
 		if (Assets.exists(path))
 			return Assets.getSound(path);
+		#end
 
 		return null;
 	}
 	static public function getJson(path:String):Null<Dynamic>
 	{
-		var ret:Null<Dynamic> = null;
-		try{
-			var raw = Paths.getContent(path);
+		var parsed:Null<Dynamic> = null;
+		var raw = Paths.getContent(path);
+
+		try {
 			if (raw != null)
-				ret = haxe.Json.parse(raw);
-		}catch(e){
-			haxe.Log.trace('$path: $e', null);
+				parsed = Json.parse(raw);
+		}
+		catch(e:haxe.Exception) {
+			var e = e.message;
+			
+			/* LIKE SI TE VALE BERGA */
+			inline function includeLinePosition() {
+				var matchStr = 'at position ';
+				var matchIdx = e.lastIndexOf(matchStr);
+				if (matchIdx == -1) return;
+
+				var position:String = e.substring(matchIdx + matchStr.length, e.length);
+				var position:Null<Int> = Std.parseInt(position);
+				//if (position == null) return;
+				
+				var line:Int = 1;
+				for (i in 0...position)
+					if (raw.fastCodeAt(i) == '\n'.code)
+						line++;
+				
+				if (line > 1)
+					e += ' (line $line)';
+
+				return;
+			}
+			includeLinePosition();
+
+			print('$path: $e');
 		}
 
-		return ret;
+		return parsed;
 	}
-	inline static public function getSparrowAtlas(key:String, ?library:String):FlxAtlasFrames
+
+	inline static public function sparrowAtlas(key:String, ?library:String, allowGPU:Bool = true):FlxAtlasFrames
 	{
 		var rawXml = Paths.getContent(getPath('images/$key.xml'));
-		return FlxAtlasFrames.fromSparrow(
-			image(key, library),
-			rawXml != null ? Xml.parse(rawXml) : null
+		return rawXml == null ? null : FlxAtlasFrames.fromSparrow(
+			image(key, library, allowGPU),
+			Xml.parse(rawXml)
 		);
 	}
 
-	inline static public function getPackerAtlas(key:String, ?library:String):FlxAtlasFrames
+	inline static public function packerAtlas(key:String, ?library:String, allowGPU:Bool = true):FlxAtlasFrames
 	{
-		var txtPath:String = getPath('images/$key.txt');
-		return FlxAtlasFrames.fromSpriteSheetPacker(
-			image(key, library),
-			exists(txtPath) ? getContent(txtPath) : txtPath
+		var rawTxt:String = Paths.getContent(getPath('images/$key.txt'));
+		return rawTxt == null ? null : FlxAtlasFrames.fromSpriteSheetPacker(
+			image(key, library, allowGPU),
+			rawTxt
 		);
 	}
 
-	inline static public function getTextureAtlas(key:String, ?library:String)
+	inline static public function animateAtlas(key:String, ?library:String)
 	{
 		#if USING_FLXANIMATE
 		var path = animateAtlasPath(key, library);
@@ -373,6 +438,26 @@ class Paths
 		return null;
 		#end
 	}
+
+	#if ALLOW_DEPRECATION
+	@:deprecated("getSparrowAtlas is deprecated, use sparrowAtlas instead.")
+	inline static public function getSparrowAtlas(key:String, ?library:String, allowGPU:Bool = true):FlxAtlasFrames
+	{
+		return sparrowAtlas(key, library, allowGPU);
+	}
+
+	@:deprecated("getPackerAtlas is deprecated, use packerAtlas instead.")
+	inline static public function getPackerAtlas(key:String, ?library:String, allowGPU:Bool = true):FlxAtlasFrames
+	{
+		return packerAtlas(key, library, allowGPU);
+	}
+
+	@:deprecated("getTextureAtlas is deprecated, use animateAtlas instead.")
+	inline static public function getTextureAtlas(key:String, ?library:String)
+	{
+		return animateAtlas(key, library);
+	}
+	#end
 
 	/** returns a FlxRuntimeShader but with file names lol **/ 
 	public static function getShader(fragFile:String = null, vertFile:String = null, version:Int = null):FlxRuntimeShader
@@ -393,20 +478,46 @@ class Paths
 		Iterates through a directory and calls a function with the name of each file contained within it
 		Returns true if the directory was a valid folder and false if not.
 	**/
+	@:deprecated('iterateDirectory is deprecated. Use readDirectory instead!')
 	inline static public function iterateDirectory(path:String, func:haxe.Constraints.Function):Bool
 	{
 		#if FILESYSTEM_ALLOWED
-		if (!FileSystem.exists(path) || !FileSystem.isDirectory(path))
-			return false;
-		
-		for (name in FileSystem.readDirectory(path))
-			func(name);
-
-		return true;
-		
-		#else
-		return AltFilePaths.iterateDirectory(path, func);
+		if (FileSystem.exists(path) && FileSystem.isDirectory(path)) {
+			for (name in FileSystem.readDirectory(path))
+				func(name);
+			
+			return true;	
+		}
 		#end
+		#if READ_EMBEDDED_ASSETS
+		return AltFilePaths.iterateDirectory(path, func);
+		#else
+		return false;
+		#end
+	}
+
+	public static inline function _readDirectory(path:String):Null<Array<String>> {
+		return if (FileSystem.exists(path) && FileSystem.isDirectory(path))
+			FileSystem.readDirectory(path);
+		else
+			null;
+	}
+
+	public static inline function readDirectory(path:String):Array<String> {
+		var ret:Array<String>;
+
+		#if FILESYSTEM_ALLOWED
+		ret = Paths._readDirectory(path);
+		if (ret != null) return ret; 
+		#end
+		
+		#if READ_EMBEDDED_ASSETS
+		ret = AltFilePaths._readDirectory(path);
+		if (ret != null) return ret; 
+		#end
+		
+		ret = [];
+		return ret;
 	}
 
 	inline static public function fileExists(key:String, ?type:AssetType, ?library:String):Bool
@@ -544,17 +655,8 @@ class Paths
 	/** Return the contents of a file, parsed as a JSON. **/
 	static public function json(key:String):Null<Dynamic>
 	{
-		var rawJSON:Null<String> = text(key);
-		if (rawJSON == null) 
-			return null;
-		
-		try{
-			return Json.parse(rawJSON);
-		}catch(e){
-			haxe.Log.trace('$key: $e', null);
-		}
-		
-		return null;
+		var path:Null<String> = getPath(key);
+		return (path == null) ? null : getJson(path);
 	}
 
 	public static inline function getFolderPath(folder:String = ""):String
@@ -610,6 +712,8 @@ class Paths
 				globalContent.push(mod);
 		}
 
+		trace('global content: $globalContent');
+
 		return globalContent;
 	}
 
@@ -663,7 +767,7 @@ class Paths
 		contentDirectories.clear();
 		contentDirectories.set('', contentFolderName);
 
-		iterateDirectory(contentFolderName, (folderName) -> {
+		for (folderName in readDirectory(contentFolderName)) {
 			var folderPath = '$contentFolderName/$folderName';
 
 			if (isDirectory(folderPath) && !list.contains(folderName))
@@ -679,10 +783,12 @@ class Paths
 					#else
 					contentMetadata.set(folderName, data);
 					#end
-					return;
+					continue;
+				}else {
+					contentMetadata.set(folderName, {});
 				}
 			}
-		});
+		}
 	}
 	
 	inline static function updateContentMetadataStructure(data:Dynamic):ContentMetadata
@@ -715,17 +821,7 @@ class Paths
 		else
 			Reflect.setField(data, "freeplaySongs", []);
 
-		////
-		if (Reflect.field(data, "weeks") != null)
-			return data; // valid ig
-
-		if (Reflect.hasField(data, "chapters")) { // TGT
-			Reflect.setField(data, "weeks", Reflect.field(data, "chapters"));
-			Reflect.deleteField(data, "chapters");
-			return data;
-		}else {
-			return {};
-		}
+		return data;
 	}
 
 	static public function getModDirectories():Array<String> 
@@ -804,12 +900,13 @@ class Paths
 	public static inline function hasString(key:String):Bool
 		return currentStrings.exists(key);
 
-	public static inline function getString(key:String):Null<String>
+	public static inline function getString(key:String):Null<String>{
 		return currentStrings.get(key);
+	}
 }
 
 private class AltFilePaths {
-	#if !FILESYSTEM_ALLOWED 
+	#if READ_EMBEDDED_ASSETS
 	// Directory => Array with file/sub-directory names
 	static var dirMap = new Map<String, Array<String>>();
 
@@ -891,6 +988,13 @@ private class AltFilePaths {
 			Func(i);
 		
 		return true;
+	}
+
+	public static inline function _readDirectory(path:String):Null<Array<String>> {
+		if (dirMap.exists(dir))
+			dirMap.get(dir);
+		else	
+			null;
 	}
 	#end
 }

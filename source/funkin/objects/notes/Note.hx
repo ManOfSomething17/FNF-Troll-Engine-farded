@@ -1,21 +1,15 @@
 package funkin.objects.notes;
 
-import math.Vector3;
-import flixel.math.FlxMath;
+import funkin.data.JudgmentManager.Judgment;
+import funkin.data.JudgmentManager.JudgmentData;
+import funkin.data.JudgmentManager.HitResult;
 import funkin.scripts.*;
 import funkin.states.PlayState;
 import funkin.states.editors.ChartingState;
 import funkin.objects.shaders.NoteColorSwap;
 import funkin.objects.playfields.*;
-import funkin.data.JudgmentManager.Judgment;
 
 using StringTools;
-
-@:structInit
-class HitResult {
-	public var judgment:Judgment = UNJUDGED;
-	public var hitDiff:Float = 0.0;
-}
 
 enum abstract SplashBehaviour(Int) from Int to Int {
 	/**Only splashes on judgements that have splashes**/
@@ -37,21 +31,14 @@ enum abstract SustainPart(Int) from Int to Int {
 
 private typedef NoteScriptState = {
 	var notetypeScripts:Map<String, FunkinHScript>;
+	function getHudSkinScript(name:String):Null<FunkinHScript>;
 }
 
 class Note extends NoteObject {
-	public var holdGlow:Bool = true; // Whether holds should "glow" / increase in alpha when held
-	public var baseAlpha:Float = 1;
-
-	public static var spriteScale:Float = 0.7;
+	public static var spriteScales:Array<Float> = [0.9, 0.85, 0.8, 0.7, 0.66, 0.6, 0.55, 0.5, 0.46, 0.4];
+	public static var spriteScale:Float = spriteScales[3];
 	public static var swagWidth(default, set):Float = 160 * spriteScale;
 	public static var halfWidth(default, null):Float = swagWidth * 0.5;
-
-	private static var colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
-
-	public static var defaultNoteAnimNames:Array<String> = ['purple0', 'blue0', 'green0', 'red0'];
-	public static var defaultHoldAnimNames:Array<String> = ['purple hold piece', 'blue hold piece', 'green hold piece', 'red hold piece'];
-	public static var defaultTailAnimNames:Array<String> = ['purple hold end', 'blue hold end', 'green hold end', 'red hold end'];
 
 	public static var quants:Array<Int> = [
 		4, // quarter note
@@ -67,13 +54,12 @@ class Note extends NoteObject {
 		192
 	];
 
-	public static var defaultNotes = [
-		'No Animation',
-		'GF Sing',
-		''
-	];
+	public static inline final pixelsPerMS:Float = 0.45;
 
 	public static final quantShitCache = new Map<String, Null<String>>();
+
+	public static var minKeyCount:Int = 1;
+	public static var maxKeyCount:Int = 9;
 
 	public static function getQuantTexture(dir:String, fileName:String, textureKey:String):Null<String> {
 		if (quantShitCache.exists(textureKey))
@@ -113,70 +99,146 @@ class Note extends NoteObject {
 	/**note type script*/
 	public var noteScript:FunkinHScript;
 
-	// editor stuff for hit sounds
-	public var editorHitBeat:Float = 0;
-
 	// basic stuff
 	public var beat:Float = 0;
 	public var strumTime:Float = 0;
 
 	public var visualTime:Float = 0;
-	public var ignoreNote:Bool = false;
 	public var prevNote:Note;
 	public var nextNote:Note;
 
 	// hold shit
 	public var holdType:SustainPart = TAP;
-	public var isSustainNote:Bool = false;
-	public var isSustainEnd:Bool = false;
 	public var sustainLength:Float = 0;
 	public var isRoll:Bool = false;
-	public var isHeld:Bool = false;
-	public var parent:Note;
+
+	/** Whether this note is a hold segment **/
+	public var isSustainNote:Bool = false;
+	/** Whether this note is the last segment of a hold **/
+	public var isSustainEnd:Bool = false;
+
+	/** Parent note of a hold segment, should be `null` if this isn't a hold segment **/
+	public var parent:Note = null;
+	/** Hold segments corresponding to this note, should be an empty array if this isn't a hold note **/
 	public var tail:Array<Note> = [];
+	/** Unhit hold segments corresponding to this note, should be an empty array if this isn't a hold note **/
 	public var unhitTail:Array<Note> = [];
-	public var holdingTime:Float = 0;
-	public var tripProgress:Float = 1;
+
+	/**
+		Used to denote which PlayField to be placed into.  
+		Holds automatically have this set to their parent's fieldIndex
+	**/
+	public var fieldIndex:Int = -1;
+
+	public var field:PlayField; // same as fieldIndex but lets you set the field directly incase you wanna do that i  guess
 
 	// quant shit
 	public var row:Int = 0;
 	public var quant:Int = 4;
-	public var isQuant:Bool = false; // Whether the loaded texture is a quant texture.
 
-	// note status
+	/** Whether the loaded texture is a quant texture.*/
+	public var isQuant:Bool = false;
+
+	#if true //// note status
+	/** Whether this Note has spawned to be shown on screen **/
 	public var spawned:Bool = false;
+	/** Whether this Note went beyond the hit window **/
 	public var tooLate:Bool = false;
+	/** Whether this Note was hit **/
 	public var wasGoodHit:Bool = false;
-	public var hitByOpponent:Bool = false;
-	public var noteWasHit:Bool = false;
+	/** Whether this Note was missed, This isn't affected by `ignoreNote` **/
 	public var causedMiss:Bool = false;
+	/** If `true` this Note won't be hittable and miss callbacks won't be called **/
+	public var ignoreNote:Bool = false;
+	/** Whether hitting this note results in a judgement **/
 	public var canBeHit(get, never):Bool;
 
+	// hold status
+	public var isHeld:Bool = false;
+	public var holdingTime:Float = 0;
+	public var tripProgress:Float = 1;
+	#end
+
+	#if true
+	/**
+		Data container for this note's result (judgment, hit time, hit difference, botplay, etc.)
+	**/
 	public var hitResult:HitResult = {judgment: UNJUDGED, hitDiff: 0}
+	
+	/** 
+		`internalName` of the `JudgementData` acquired when judging this note.  
+		If this note hasn't been judged, the value will be `"unknown"`
+	**/
 	public var rating:String = 'unknown';
+	
+	/** 
+		`accuracy` of the `JudgementData` acquired when judging this note.  
+		If this note hasn't been judged, the value will be `0`
+	**/
 	public var ratingMod:Float = 0; // 0 = unknown, 0.25 = shit, 0.5 = bad, 0.75 = good, 1 = sick
+	
+	/**
+		`NoteSplash` instance that was used when this note was hit.  
+		If a note splash wasn't spawned when hitting this note, this will be `null`
+	**/
+	public var noteSplash:Null<NoteSplash> = null;
+	#end
 
 	//// note type/customizable shit
 	public var noteMod(default, set):String = null;
 	public var noteType(default, set):String = null; // the note type
 	public var texture(default, set):String; // texture for the note
-	public var canQuant:Bool = true; // whether a quant texture should be searched for or not
-	public var usesDefaultColours:Bool = true; // whether this note uses the default note colours (lets you change colours in options menu)
-	// This automatically gets set if a notetype changes the ColorSwap values
 
-	//// note 
-	public var defaultJudgement:Judgment;
-	public var breaksCombo:Bool = false; // hitting this will cause a combo break
-	public var blockHit:Bool = false; // whether you can hit this note or not
-	public var hitCausesMiss:Bool = false; // hitting this causes a miss
-	public var missHealth:Float = 0; // damage when hitCausesMiss = true and you hit this note
-	public var ratingDisabled:Bool = false; // hitting or missing this note shouldn't affect stats, this doesn't prevent sing/miss animations and sounds from playing!
-	public var hitsoundDisabled:Bool = false; // hitting this does not cause a hitsound when user turns on hitsounds
+	/** 
+		Whether a quant texture should be searched for when updating this note's texture
+	**/
+	public var canQuant:Bool = true;
+	
+	/**
+		Whether this note uses the default note colours (lets you change colours in options menu)  
+		This gets set to `false` if a notetype changes the ColorSwap values
+	**/
+	public var usesDefaultColours:Bool = true;
 
-	//// characters
+	/** 
+		Judgement to be used when judging this note.  
+		If `null`, default judgements are used instead.
+	**/
+	public var defaultJudgement:Judgment = null;
+	
+	/** Whether hitting this note causes a combo break **/
+	public var breaksCombo:Bool = false;
+	
+	/** Prevents this note from being hit **/
+	public var blockHit:Bool = false;
+	
+	/** hitting this causes a miss **/ 
+	public var hitCausesMiss:Bool = false;
 
-	/** Which characters sing this note, if it's blank then the playfield's characters are used **/
-	public var characters:Array<Character> = [];
+	/** Health to be subtracted when `hitCausesMiss` is `true` and you hit this note **/
+	public var missHealth:Float = 0;
+
+	/**
+		Whether hitting or missing this note shouldn't affect stats.
+		NOTE: This doesn't prevent sing/miss animations and sounds from playing!
+	**/
+	public var ratingDisabled:Bool = false;
+
+	/** Prevents the hitsound from being played if the user turned on hitsounds **/
+	public var hitsoundDisabled:Bool = false;
+
+	/**
+		If you need to tap the note to hit it, or just have the direction be held when it can be judged to hit.  
+		An example is Stepmania mines
+	**/
+	public var requiresTap:Bool = true;
+
+	/** The maximum amount of time you can release a hold before it counts as a miss **/
+	public var maxReleaseTime:Float = 0.25;
+
+	#if true
+	/** Which characters sing this note, if `null` then the playfield's characters are used **/
+	public var characters:Array<Character> = null;
 
 	/** Whether if gf should also sing this note **/
 	public var gfNote:Bool = false;
@@ -198,23 +260,9 @@ class Note extends NoteObject {
 
 	/** Suffix to be added to the **default** sing animation names (resulting name would be 'singLEFT'+'suffix') **/
 	public var characterMissAnimSuffix:String = "miss";
+	#end
 
 	////
-
-	/** If you need to tap the note to hit it, or just have the direction be held when it can be judged to hit.
-	 * An example is Stepmania mines **/
-	public var requiresTap:Bool = true;
-
-	/** The maximum amount of time you can release a hold before it counts as a miss**/
-	public var maxReleaseTime:Float = 0.25;
-
-	/**Used to denote which PlayField to be placed into.
-	 * Holds automatically have this set to their parent's fieldIndex
-	 */
-	public var fieldIndex:Int = -1;
-
-	public var field:PlayField; // same as fieldIndex but lets you set the field directly incase you wanna do that i  guess
-
 	public var noteSplashBehaviour:SplashBehaviour = DEFAULT;
 	public var noteSplashDisabled(get, set):Bool; // shortcut, disables the notesplash when you hit this note
 	public var noteSplashTexture:String = null; // spritesheet for the notesplash
@@ -231,24 +279,24 @@ class Note extends NoteObject {
 	// editor stuff
 	public var inEditor:Bool = false;
 	public var chartData:Dynamic = null;
-	public var mustPress:Bool = true; // perhaps make this a getter for field.isPlayer
 	public var realColumn:Int;
+	public var mustPress:Bool = true; // perhaps make this a getter for field.isPlayer
+	public var editorHitBeat:Float = 0;
 
 	// mod manager
 	public var garbage:Bool = false; // if this is true, the note will be removed in the next update cycle
+	public var baseAlpha:Float = 1;
 	public var alphaMod:Float = 1;
 	public var alphaMod2:Float = 1; // TODO: unhardcode this shit lmao
-
 	// What is this even used for anymore??
+
 	public var typeOffsetX:Float = 0; // used to offset notes, mainly for note types. use in place of offset.x and offset.y when offsetting notetypes
 	public var typeOffsetY:Float = 0;
 	public var typeOffsetAngle:Float = 0;
 	public var multSpeed:Float = 1.0;
 
-	// do not tuch
-	public var baseScaleX:Float = 1;
-	public var baseScaleY:Float = 1;
-	public var z:Float = 0;
+	/** Whether holds should "glow" / increase in alpha when held */
+	public var holdGlow:Bool = true;
 
 	// Determines how the note can be modified by the modchart system
 	// Could be moved into NoteObject? idk lol
@@ -258,7 +306,15 @@ class Note extends NoteObject {
 	public var copyVerts:Bool = true;
 
 	#if ALLOW_DEPRECATION
-	public var desiredZIndex:Float = 0; // unused (?)
+	@:noCompletion @:deprecated("This variable is not in use.")
+	public var baseScaleX:Float = 1;
+	@:noCompletion @:deprecated("This variable is not in use.")
+	public var baseScaleY:Float = 1;
+
+	@:noCompletion @:deprecated("This variable is not in use.")
+	public var z:Float = 0;
+	@:noCompletion @:deprecated("This variable is not in use.")
+	public var desiredZIndex:Float = 0;
 
 	// Angle is controlled by verts in the modchart system
 	@:noCompletion public var copyAngle(get, set):Bool;
@@ -275,7 +331,8 @@ class Note extends NoteObject {
 	@:noCompletion inline function set_realNoteData(v:Int) return realColumn = v;
 	#end
 
-	@:noCompletion function get_canBeHit() return UNJUDGED != PlayState.instance.judgeManager.judgeNote(this, Conductor.songPosition);
+	@:noCompletion function get_canBeHit()
+		return UNJUDGED != PlayState.instance.judgeManager.judgeNote(this, Conductor.songPosition);
 
 	@:noCompletion inline function get_noteSplashDisabled() return noteSplashBehaviour == DISABLED;
 	@:noCompletion inline function set_noteSplashDisabled(val:Bool) {
@@ -284,29 +341,32 @@ class Note extends NoteObject {
 	}
 
 	////
+	var state(get, never):NoteScriptState;
+	inline function get_state():NoteScriptState
+		return inEditor ? ChartingState.instance : PlayState.instance;
+
 	private function set_texture(value:String):String {
 		if (tex != value) reloadNote(value, texSuffix);
 		return tex;
 	}
 
 	/**
+		Set this note's HSB values to the user defined column / quant colors.  
+
 		@param force If `true`, forces the colours to update even if `usesDefaultColours` is `false`
 	**/
 	public function updateColours(force:Bool = false){
 		if (!force && !usesDefaultColours) return;
-		if (colorSwap==null) return;
-		if (column == -1) return; // FUCKING PSYCH EVENT NOTES!!!
+		if (colorSwap == null) return;
 		
-		var hsb = isQuant ? ClientPrefs.quantHSV[quants.indexOf(quant)] : ClientPrefs.arrowHSV[column % 4];
+		var hsb = isQuant ? ClientPrefs.quantHSV[quants.indexOf(quant)] : getNoteColours(currentAnimations);
 		colorSwap.setHSBIntArray(hsb);
 
-		if (noteScript != null)
-			noteScript.executeFunc("onUpdateColours", [this], this);
-
-		if (genScript != null)
-			genScript.executeFunc("onUpdateColours", [this], this);
+		noteScript?.executeFunc("onUpdateColours", [this]);
+		genScript?.executeFunc("onUpdateColours", [this]);
 	}
 
+	@:noCompletion
 	private function set_noteMod(value:String):String {
 		if (value == null)
 			value = 'default';
@@ -314,8 +374,7 @@ class Note extends NoteObject {
 		updateColours();
 
 		////
-		if (!inEditor && PlayState.instance != null)
-			genScript = PlayState.instance.getHudSkinScript(value);
+		genScript = state?.getHudSkinScript(value);
 
 		////
 		var loaded:Bool;
@@ -344,6 +403,7 @@ class Note extends NoteObject {
 		return noteMod = value;
 	}
 
+	@:noCompletion
 	private function set_noteType(value:String):String {
 		noteSplashTexture = PlayState.splashSkin;
 
@@ -357,38 +417,16 @@ class Note extends NoteObject {
 		var sat = colorSwap.saturation;
 		var brt = colorSwap.brightness;
 
-		if (column > -1 && noteType != value) {
-			var instance:NoteScriptState = inEditor ? ChartingState.instance : PlayState.instance;
-			noteScript = (instance == null) ? null : instance.notetypeScripts.get(value);
-
-			if (noteScript != null) {
-				noteScript.executeFunc("setupNote", [this], this);
-			} else { // default notes. these values won't get set if you make a script for them!
-				switch (value) {
-					case 'Alt Animation':
-						characterHitAnimSuffix = "-alt";
-						characterMissAnimSuffix = "-altmiss";
-
-					case 'Hey!':
-						characterHitAnimName = 'hey';
-						// TODO
-
-					//case 'Hurt Note':
-							
-
-					case 'GF Sing':
-						gfNote = true;
-
-					case 'No Animation':
-						noAnimation = true;
-						noMissAnimation = true;
-				}
-			}
-
+		if (noteType != value) {
 			noteType = value;
+			noteScript = state?.notetypeScripts.get(value);
+			
+			if (noteScript != null)
+				noteScript.executeFunc("setupNote", [this], null, ["super" => _setupNoteType]);
+			else
+				_setupNoteType();
 
-			if (genScript != null)
-				genScript.executeFunc("setupNoteType", [this], this, ["this" => this]);
+			genScript?.executeFunc("onNoteTypeSet", [this]);
 		}
 
 		if (usesDefaultColours) {
@@ -405,22 +443,42 @@ class Note extends NoteObject {
 
 		////
 
-		if (noteScript != null)
-			noteScript.executeFunc("postSetupNote", [this], this);
-
-		if (genScript != null)
-			genScript.executeFunc("postSetupNoteType", [this], this);
+		noteScript?.executeFunc("onSetupNotePost", [this]);
+		genScript?.executeFunc("onNoteTypeSetPost", [this]);
 
 		////
 		if (isQuant && Paths.imageExists('QUANT' + noteSplashTexture))
 			noteSplashTexture = 'QUANT' + noteSplashTexture;
 
-		if (!isQuant || (isQuant && noteSplashTexture.startsWith("QUANT"))) {
+		if (!isQuant || noteSplashTexture.startsWith("QUANT")) {
 			noteSplashHue = colorSwap.hue;
 			noteSplashSat = colorSwap.saturation;
 			noteSplashBrt = colorSwap.brightness;
 		}
 		return value;
+	}
+
+	function _setupNoteType() {
+		// default notes. these values won't get set if you make a script for them!
+		switch (noteType) {
+			case 'Alt Animation':
+				characterHitAnimSuffix = "-alt";
+				characterMissAnimSuffix = "-altmiss";
+
+			case 'Hey!':
+				characterHitAnimName = 'hey';
+				// TODO
+
+			//case 'Hurt Note':
+					
+
+			case 'GF Sing':
+				gfNote = true;
+
+			case 'No Animation':
+				noAnimation = true;
+				noMissAnimation = true;
+		}
 	}
 
 	override function toString() {
@@ -432,7 +490,7 @@ class Note extends NoteObject {
 		super(NOTE);
 
 		this.strumTime = this.visualTime = strumTime;
-		this.column = column;
+		this.column = this.realColumn = column;
 		this.prevNote = prevNote;
 		this.fieldIndex = fieldIndex;
 		this.holdType = susPart;
@@ -465,17 +523,14 @@ class Note extends NoteObject {
 	public var tex:String;
 	public var texSuffix:String = '';
 
-	public function reloadNote(texture:String = '', suffix:String = '', folder:String = '', hInd:Int = 0, vInd:Int = 0) {
+	public function reloadNote(texture:String = '', suffix:String = '', folder:String = '') {
 		tex = texture;
 		texSuffix = suffix;
 
-		if (genScript != null)
-			genScript.executeFunc("onReloadNote", [this, texture, suffix], this);
-
-		if (noteScript != null)
-			noteScript.executeFunc("onReloadNote", [this, texture, suffix], this);
-
-		if (genScript != null && genScript.executeFunc("preReloadNote", [this, texture, suffix], this) == Globals.Function_Stop)
+		if (genScript?.executeFunc("onReloadNote", [this, texture, suffix]) == Globals.Function_Stop)
+			return;
+		
+		if (noteScript?.executeFunc("onReloadNote", [this, texture, suffix]) == Globals.Function_Stop)
 			return;
 
 		////
@@ -490,11 +545,16 @@ class Note extends NoteObject {
 		 * Sets `isQuant` to `true` if a quant texture is to be returned
 		 */
 		inline function getTextureKey() { // made it a function just cause i think it's easier to read it like this
-			var skin:String = (texture.length > 0) ? texture : PlayState.arrowSkin;
-			var split:Array<String> = skin.split('/');
+			var folderPath:String = (folder.length == 0) ? folder : '$folder/';
+			var fileName:String = (texture.length > 0) ? texture : PlayState.arrowSkin;
 
-			var fileName:String = split.pop() + suffix;
-			var folderPath:String = (folder == '' ? '' : folder + '/') + split.join('/');
+			var split:Int = fileName.lastIndexOf('/');
+			if (split != -1) {
+				var fap:String = fileName.substr(split + 1);
+				if (fap.length > 0) folderPath += '$fap/';
+				fileName = fileName.substr(0, split) + suffix;
+			} else
+				fileName = fileName + suffix;
 
 			var key:Null<String> = null;
 			this.isQuant = false;
@@ -506,8 +566,8 @@ class Note extends NoteObject {
 				key = (!this.isQuant && Paths.imageExists(normalKey)) ? normalKey : quantKey;
 			}
 
-			if (folderPath != '')
-				checkFolder(folderPath + '/');
+			if (folderPath.length != 0)
+				checkFolder(folderPath);
 
 			if (key == null)
 				checkFolder('');
@@ -522,93 +582,57 @@ class Note extends NoteObject {
 		if (wasQuant != isQuant)
 			updateColours();
 
-		if (vInd > 0 && hInd > 0) {
-			var graphic = Paths.image(textureKey);
-			setSize(graphic.width / hInd, graphic.height / vInd);
-			loadGraphic(graphic, true, Math.floor(width), Math.floor(height));
-			loadIndNoteAnims();
-		} else {
-			frames = Paths.getSparrowAtlas(textureKey);
-			loadNoteAnims();
-		}
-
+		frames = Paths.sparrowAtlas(textureKey);
+		frames != null ? loadNoteAnims() : loadGraphic(Paths.image(textureKey));
 		if (inEditor)
 			setGraphicSize(ChartingState.GRID_SIZE, ChartingState.GRID_SIZE);
 
 		defScale.copyFrom(scale);
 		updateHitbox();
-
 		////
-		if (genScript != null)
-			genScript.executeFunc("postReloadNote", [this, texture, suffix], this);
-
-		if (noteScript != null)
-			noteScript.executeFunc("postReloadNote", [this, texture, suffix], this);
-	}
-
-	public function loadIndNoteAnims() {
-		var changed = false;
-
-		if (noteScript != null && noteScript.exists("loadIndNoteAnims")) {
-			noteScript.executeFunc("loadIndNoteAnims", [this], this, ["super" => _loadIndNoteAnims]);
-			changed = true;
-		}
-
-		if (genScript != null && genScript.exists("loadIndNoteAnims")) {
-			genScript.executeFunc("loadIndNoteAnims", [this], this, ["super" => _loadIndNoteAnims, "noteTypeLoaded" => changed]);
-			changed = true;
-		}
-
-		if (!changed)
-			_loadIndNoteAnims();
-	}
-
-	function _loadIndNoteAnims() {
-		final animName:String = 'default';
-		final animFrames:Array<Int> = switch (holdType) {
-			default: [column + 4];
-			case PART: [column];
-			case END: [column + 4];
-		}
-		animation.add(animName, animFrames);
-		animation.play(animName, true);
-
-		// scale.set(6, 6); // causd mines to be huge lol
+		genScript?.executeFunc("onReloadNotePost", [this, texture, suffix]);
+		noteScript?.executeFunc("onReloadNotePost", [this, texture, suffix]);
 	}
 
 	public function loadNoteAnims() {
 		var changed = false;
 
-		if (noteScript != null && noteScript.exists("loadNoteAnims")) {
-			noteScript.executeFunc("loadNoteAnims", [this], this, ["super" => _loadNoteAnims]);
+		if (noteScript != null && noteScript.exists("onLoadNoteAnims")) {
+			noteScript.executeFunc("onLoadNoteAnims", [this], null, ["super" => _loadNoteAnims]);
 			changed = true;
 		}
 
-		if (genScript != null && genScript.exists("loadNoteAnims")) {
-			genScript.executeFunc("loadNoteAnims", [this], this, ["super" => _loadNoteAnims, "noteTypeLoaded" => changed]);
+		if (genScript != null && genScript.exists("onLoadNoteAnims")) {
+			genScript.executeFunc("onLoadNoteAnims", [this], null, ["super" => _loadNoteAnims, "noteTypeLoaded" => changed]);
 			changed = true;
 		}
 
 		if (!changed)
 			_loadNoteAnims();
+
+		noteScript?.executeFunc("onLoadNoteAnimsPost", [this], null, ["noteAnimsChanged" => changed]);
+		genScript?.executeFunc("onLoadNoteAnimsPost", [this], null, ["noteAnimsChanged" => changed]);
+
 	}
 
 	function _loadNoteAnims() {
 		final animName:String = 'default';
 		final animPrefix:String = switch (holdType) {
-			default: defaultNoteAnimNames[column];
-			case PART: defaultHoldAnimNames[column];
-			case END: defaultTailAnimNames[column];
+			default: '${currentAnimations.noteAnimations[column % currentAnimations.noteAnimations.length]}0';
+			case PART: currentAnimations.holdAnimations[column % currentAnimations.holdAnimations.length];
+			case END: currentAnimations.tailAnimations[column % currentAnimations.tailAnimations.length];
 		}
 
-		if (column == 0) animation.addByPrefix(animName, 'pruple end hold'); // ?????
+		// because phantomarcade cant spell
+		if (holdType == END && animPrefix.contains("purple")) {
+			animation.addByPrefix(animName, 'pruple end hold', 24, true); // ?????
+		}
 		// this is autistic wtf
 
 		animation.addByPrefix(animName, animPrefix);
 		animation.play(animName, true);
- 
-		scale.set(spriteScale, spriteScale); 
-	} 
+		scale.set(spriteScale, spriteScale);
+	}
 
 	override function draw() {
 		colorSwap.daAlpha = alphaMod * alphaMod2;
@@ -627,19 +651,42 @@ class Note extends NoteObject {
 		if (inEditor)
 			return;
 
-		if (noteScript != null) {
-			noteScript.executeFunc("noteUpdate", [elapsed], this);
-		}
 
-		if (genScript != null) {
-			genScript.executeFunc("noteUpdate", [elapsed], this);
-		}
-
-		if (hitByOpponent)
-			wasGoodHit = true;
+		noteScript?.executeFunc("onNoteUpdate", [this, elapsed]);
+		genScript?.executeFunc("onNoteUpdate", [this, elapsed]);
 
 		var diff = (strumTime - Conductor.songPosition);
 		if (diff < -ClientPrefs.hitWindow && !wasGoodHit)
 			tooLate = true;
 	}
+
+	/*Note hit callbacks, useful for hardcoding but also makes it easier to see what scripts are calling what*/
+
+	public function judgeNote(hitDiff:Float):Null<Judgment> {
+		// did you know if you always return UNJUDGED a note won't be hittable?
+		// i thought that was interesting
+		// (aka fake notes when)
+		if (noteScript != null) {
+			var judge = noteScript.executeFunc("judgeNote", [this, hitDiff], this);
+			if (judge != null) return judge;
+		}
+		return null;
+	}
+
+	public function transformJudgeData(dataToMutate:JudgmentData): JudgmentData {
+		switch(noteType){
+
+			default:
+				var ret:Dynamic = noteScript?.executeFunc("transformJudgeData", [this]);
+				if (ret != null && ret != null)
+					return cast ret;
+		}
+
+		return dataToMutate;
+	}
+
+
+
+
+
 }

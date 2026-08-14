@@ -1,5 +1,6 @@
 package funkin.states;
 
+import math.CoolMath;
 import funkin.data.Highscore;
 import funkin.data.Song;
 import funkin.data.Level;
@@ -103,9 +104,9 @@ class LevelStageProp extends FlxSprite
 		else 
 		#end
 		if (Paths.fileExists('images/${propData.graphic}.txt', TEXT))
-			prop.frames = Paths.getPackerAtlas(propData.graphic);
+			prop.frames = Paths.packerAtlas(propData.graphic);
 		else if (Paths.fileExists('images/${propData.graphic}.xml', TEXT))
-			prop.frames = Paths.getSparrowAtlas(propData.graphic);
+			prop.frames = Paths.sparrowAtlas(propData.graphic);
 		else
 			prop.loadGraphic(Paths.image(propData.graphic));
 
@@ -218,11 +219,11 @@ class StoryModeState extends MusicBeatState {
 		var levelDir = Paths.getFolderPath(folder) + 'levels/';
 
 		var contentLevelPaths:Array<String> = [];
-		Paths.iterateDirectory(levelDir, function(file:String){
+		for (file in Paths.readDirectory(levelDir)) {
 			var name = Path.withoutExtension(levelDir + file);
 			if(!contentLevelPaths.contains(name))
 				contentLevelPaths.push(name);
-		});
+		}
 
 		var contentLevels:Array<Level> = [];
 		for (filePath in contentLevelPaths) {
@@ -282,7 +283,7 @@ class StoryModeState extends MusicBeatState {
 		add(difficultySpr);
 
 		difficultyLeft = new FlxSprite();
-		difficultyLeft.frames = Paths.getSparrowAtlas('storymenu/ui/arrows');
+		difficultyLeft.frames = Paths.sparrowAtlas('storymenu/ui/arrows');
 		difficultyLeft.animation.addByPrefix("idle", "leftIdle", 24);
 		difficultyLeft.animation.addByPrefix("press", "leftConfirm", 24, false);
 		difficultyLeft.animation.play("idle");
@@ -294,7 +295,7 @@ class StoryModeState extends MusicBeatState {
 		add(difficultyLeft);
 
 		difficultyRight = new FlxSprite();
-		difficultyRight.frames = Paths.getSparrowAtlas('storymenu/ui/arrows');
+		difficultyRight.frames = Paths.sparrowAtlas('storymenu/ui/arrows');
 		difficultyRight.animation.addByPrefix("idle", "rightIdle", 24);
 		difficultyRight.animation.addByPrefix("press", "rightConfirm", 24, false);
 		difficultyRight.animation.play("idle");
@@ -305,18 +306,22 @@ class StoryModeState extends MusicBeatState {
 		}
 		add(difficultyRight);
 
-		for(idx in 0...levels.length){
-			var level:Level = levels[idx];
+		for (idx => level in levels) {
+			Paths.currentModDirectory = level.folder;
+
 			var title = level.createTitle();
 			title.alpha = idx==selectedLevel ? 1 : 0;
 			title.ID = idx;
 			levelTitles.add(title);
+			
 			var backgroundGroup = new FlxSpriteGroup();
 			backgroundGroup.ID = idx;
 			backgroundGroup.y = 56;
+
 			var propGroup = new FlxSpriteGroup();
 			propGroup.ID = idx;
 			propGroup.y = 56;
+			
 			// todo bg group
 			level.populateGroup(propGroup, backgroundGroup);
 			levelBGGroups.push(backgroundGroup);
@@ -352,7 +357,7 @@ class StoryModeState extends MusicBeatState {
 		var radius:Float = 60 + (levels.length * 15);
 		var lerpVal:Float = 1.0 - Math.exp(-elapsed * 16.0);
 
-		lerpHighscore = CoolUtil.coolLerp(lerpHighscore, targetHighscore, elapsed * 12);
+		lerpHighscore = CoolMath.coolLerp(lerpHighscore, targetHighscore, elapsed * 12);
 		scoreText.text = 'HIGH SCORE: ${Math.round(lerpHighscore)}';
 		
 		for(idx in 0...levelTitles.members.length){
@@ -361,10 +366,10 @@ class StoryModeState extends MusicBeatState {
 
 			var ang:Float = (relativeIndex / levels.length) * (Math.PI * 2);
 			
-			title.scale.x = FlxMath.lerp(title.scale.x, (relativeIndex == 0 ? 1.1 : 0.9) + (((FlxMath.fastCos(ang) - 1) * radius) / 1280), lerpVal);
+			title.scale.x = FlxMath.lerp(title.scale.x, (relativeIndex == 0 ? 1.1 : 0.9) + (((Math.cos(ang) - 1) * radius) / 1280), lerpVal);
 				
-			title.y = FlxMath.lerp(title.y, levelTitles.y + ((FlxMath.fastSin(ang) * radius)), lerpVal);
-			title.alpha = FlxMath.lerp(title.alpha, FlxMath.fastCos(ang) * (relativeIndex == 0 ? 1 : 0.6), lerpVal);
+			title.y = FlxMath.lerp(title.y, levelTitles.y + ((Math.sin(ang) * radius)), lerpVal);
+			title.alpha = FlxMath.lerp(title.alpha, Math.cos(ang) * (relativeIndex == 0 ? 1 : 0.6), lerpVal);
 			title.scale.y = title.scale.x;
 
 			if(title.alpha < 0)title.alpha = 0;
@@ -455,6 +460,8 @@ class StoryModeState extends MusicBeatState {
 			newLevel = 0;
 
 		selectedLevel = newLevel;
+
+		Paths.currentModDirectory = levels[selectedLevel].folder;
 
 		if (!silent)
 			FlxG.sound.play(Paths.sound("scrollMenu"));

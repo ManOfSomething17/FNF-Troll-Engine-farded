@@ -1,31 +1,29 @@
 package funkin.objects.playfields;
 
+import flixel.util.FlxDestroyUtil;
 import funkin.modchart.modifiers.ReverseModifier;
 import funkin.modchart.Modifier;
 import flixel.math.FlxMath;
 import flixel.math.FlxAngle;
 import flixel.math.FlxPoint;
-import flixel.util.FlxSort;
-import flixel.util.FlxDestroyUtil;
 import flixel.graphics.FlxGraphic;
 import flixel.graphics.frames.FlxFrame.FlxFrameAngle;
 import flixel.system.FlxAssets.FlxShader;
 import math.Vector3;
 import math.VectorHelpers;
 import openfl.Vector;
-import openfl.geom.ColorTransform;
 import funkin.modchart.ModManager;
 import funkin.modchart.Modifier.RenderInfo;
-import funkin.objects.shaders.NoteColorSwap;
 import funkin.states.PlayState;
+import funkin.states.PlayState.instance as game;
+import funkin.Conductor.songPosition;
+import funkin.Conductor.curDecBeat;
 import haxe.ds.Vector as FastVector;
 import funkin.objects.playfields.FieldBase;
 
 using StringTools;
 
-
-
-final scalePoint = new FlxPoint(1, 1);
+final scalePoint = FlxPoint.get(1, 1);
 
 class NoteField extends FieldBase
 {
@@ -42,15 +40,6 @@ class NoteField extends FieldBase
 	public var optimizeHolds = false; //ClientPrefs.optimizeHolds;
 	public var defaultShader:FlxShader = new FlxShader();
 
-	public function new(field:PlayField, modManager:ModManager)
-	{
-		super(0, 0);
-		this.field = field;
-		this.modManager = modManager;
-		this.holdSubdivisions = Std.int(ClientPrefs.holdSubdivs);
-	}
-	override public function getNotefield() {return this;}
-
 	/**
 	 * The Draw Distance Modifier
 	 * Multiplied by the draw distance to determine at what time a note will start being drawn
@@ -64,10 +53,7 @@ class NoteField extends FieldBase
 	 * For example, you can have multiple notefields sharing 1 set of mods by giving them all the same modNumber
 	 */
 	public var modNumber(default, set):Int = 0;
-	function set_modNumber(d:Int){
-		modManager.getActiveMods(d); // generate an activemods thing if needed
-		return modNumber = d;
-	}
+
 	/**
 	 * The ModManager to be used to get modifier positions, etc
 	 * Required!
@@ -78,9 +64,6 @@ class NoteField extends FieldBase
 	 * The song's scroll speed. Can be messed with to give different fields different speeds, etc.
 	 */
 	public var songSpeed:Float = 1.6;
-
-	var curDecStep:Float = 0;
-	var curDecBeat:Float = 0;
 
 	final perspectiveArrDontUse:Array<String> = ['__perspective'];
 
@@ -101,34 +84,38 @@ class NoteField extends FieldBase
 	public var zoom:Float = 1;
 
 	////
-	static function drawQueueSort(Obj1:RenderObject, Obj2:RenderObject)
+	var lookupMap = new haxe.ds.ObjectMap<Dynamic, RenderObject>();
+
+	var orient:Float = 0;
+
+	public function new(field:PlayField)
 	{
-		return FlxSort.byValues(FlxSort.ASCENDING, Obj1.zIndex, Obj2.zIndex);
+		super(0, 0);
+		this.field = field;
+		this.holdSubdivisions = Std.int(ClientPrefs.holdSubdivs);
 	}
 
-	var lookupMap = new haxe.ds.ObjectMap<Dynamic, RenderObject>();
+	override public function getNotefield()
+		return this;
 
 	// does all the drawing logic, best not to touch unless you know what youre doing
 	override function preDraw()
 	{
-		drawQueue = [];
+		drawQueue.resize(0);
 		if (field == null) return;
 		if ((!exists || !visible) && !forcePreDraw) return;
 		
-		curDecStep = Conductor.curDecStep;
-		curDecBeat = Conductor.curDecBeat;
-
-		zoom = modManager.getFieldZoom(baseZoom, curDecBeat, (Conductor.songPosition - ClientPrefs.noteOffset), modNumber, this);
-		var notePos:Map<Note, Vector3> = [];
+		zoom = modManager.getFieldZoom(baseZoom, curDecBeat, (songPosition - ClientPrefs.noteOffset), modNumber, this);
+		orient = modManager.getValue("orient", modNumber);
 		// can probably do orient a better way eventually buti m fuckinbg lazy rn
-		var nextNotePos:Map<Note, Vector3> = []; // for orient
+		var nextNotePos:Array<Vector3> = []; // for orient
 		var taps:Array<Note> = [];
 		var holds:Array<Note> = [];
 
 		inline function getModValue(name:String):Null<Float>
 			return modManager.get(name)?.getValue(modNumber);
 
-		var lookAheadTime:Float = getModValue("lookAheadTime");
+		var lookAheadTime:Float = orient != 0 ? getModValue("lookAheadTime") : 0;
 		var alwaysDraw:Bool;
 		var drawDist:Float;
 		
@@ -140,19 +127,16 @@ class NoteField extends FieldBase
 		else{
 			alwaysDraw = false;
 			drawDist = getModValue("drawDistance") ?? cast FlxG.height;
-			var dddm = getModValue("disableDrawDistMult");
-			if (dddm == null || dddm == 0.0)
+			if ((getModValue("disableDrawDistMult") ?? 0.0) == 0.0)
 				drawDist *= drawDistMod;
 		}		
 		
-		for (daNote in field.spawnedNotes)
-		{
-			if (!daNote.exists || !daNote.visible)
-				continue;
+		if (songSpeed != 0) {
+			for (daNote in field.spawnedNotes) {
+				if (!daNote.exists || !daNote.visible)
+					continue;
 
-			if (songSpeed != 0)
-			{
-				if (daNote.wasGoodHit && daNote.sustainLength > 0)
+				if (daNote.holdingTime > 0)
 					continue;
 				
 				var speed:Float = modManager.getNoteSpeed(daNote, modNumber, songSpeed);
@@ -160,38 +144,31 @@ class NoteField extends FieldBase
 				if (visPos > drawDist)
 					continue; // don't draw
 
-				if (!daNote.copyX && !daNote.copyY) {
-					daNote.vec3Cache.setTo(
-						daNote.x,
-						daNote.y,
-						0
-					);
-					notePos.set(daNote, daNote.vec3Cache);
-					taps.push(daNote);
-					continue;
-				}
-				
-				else if (daNote.isSustainNote)
+				if (daNote.isSustainNote)
 				{
 					holds.push(daNote);
 				}
+				else if (!daNote.copyX && !daNote.copyY)
+				{
+					daNote.vec3Cache.setTo(daNote.x, daNote.y, 0);
+					taps.push(daNote);
+				}
 				else
 				{
-					var diff = Conductor.songPosition - daNote.strumTime;
-					var pos = modManager.getPos(visPos, diff, curDecBeat, daNote.column, modNumber, daNote, this, perspectiveArrDontUse,
-						daNote.vec3Cache); // perspectiveDONTUSE is excluded because its code is done in the modifyVert function
+					var diff = songPosition - daNote.strumTime;
+					var pos = modManager.getPos(visPos, diff, curDecBeat, daNote.column, modNumber, daNote, this, perspectiveArrDontUse, daNote.vec3Cache); // perspectiveDONTUSE is excluded because its code is done in the modifyVert function
+					
 					if (!daNote.copyX)
 						pos.x = daNote.x;
 
 					if (!daNote.copyY)
 						pos.y = daNote.y;
 
-					if (modManager.getValue("orient", modNumber) != 0){
+					if (orient != 0) {
 						var nextPos = modManager.getPos(visPos + lookAheadTime, diff + lookAheadTime, curDecBeat, daNote.column, modNumber, daNote, this, perspectiveArrDontUse); // perspectiveDONTUSE is excluded because its code is done in the modifyVert function
-						nextNotePos.set(daNote, nextPos);
+						nextNotePos[taps.length] = nextPos;
 					}
 					
-					notePos.set(daNote, pos);
 					taps.push(daNote);
 				}
 			}
@@ -229,9 +206,8 @@ class NoteField extends FieldBase
 		}
 
 		// draw tap notes
-		for (note in taps) {
-			var pos = notePos.get(note);
-			var object = drawNote(note, pos, nextNotePos.get(note));
+		for (i => note in taps) {
+			var object = drawNote(note, note.vec3Cache, nextNotePos[i]);
 			if (object == null)
 				continue;
 			lookupMap.set(note, object);
@@ -268,11 +244,12 @@ class NoteField extends FieldBase
 			drawQueue.push(object);
 		}
 
-		if ((FlxG.state is PlayState))
-			PlayState.instance.callOnScripts("notefieldPreDraw", [this],
-				["drawQueue" => drawQueue, "lookupMap" => lookupMap]); // lets you do custom rendering in scripts, if needed
-		// one example would be reimplementing Die Batsards' original bullet mechanic
-		// if you need an example on how this all works just look at the tap note drawing portion
+		if (FlxG.state is PlayState) {
+			// lets you do custom rendering in scripts, if needed
+			// one example would be reimplementing Die Batsards' original bullet mechanic
+			// if you need an example on how this all works just look at the tap note drawing portion
+			game.callOnScripts("notefieldPreDraw", [this], ["drawQueue" => drawQueue, "lookupMap" => lookupMap]);
+		}
 
 		lookupMap.clear();
 
@@ -297,11 +274,10 @@ class NoteField extends FieldBase
 				object.vertices = vertices; // i dont think this is needed but its like, JUUUSST incase
 			}
 		}
-
 	}
 	
-	override function draw()return;
-	
+	override function draw()
+		return;
 
 	function getPoints(hold:Note, ?wid:Float, speed:Float, vDiff:Float, diff:Float, spiralHolds:Bool = false, ?lookAhead:Float = 1):Array<Vector3>
 	{ // stolen from schmovin'
@@ -328,15 +304,18 @@ class NoteField extends FieldBase
 		p1.z = 0.0;
 
 		wid /= 2.0;
-		var quad0 = new Vector3(-wid);
-		var quad1 = new Vector3(wid);
+		var quad0 = Vector3.get(-wid);
+		var quad1 = Vector3.get(wid);
 		var scale:Float = (z!=0.0) ? (1.0 / z) : 1.0;
 
 		if (!spiralHolds || simpleDraw) {
 			// less accurate, but higher FPS
 			quad0.scaleBy(scale);
 			quad1.scaleBy(scale);
-			return [p1.add(quad0, quad0), p1.add(quad1, quad1), p1];
+			quad0.incrementBy(p1);
+			quad1.incrementBy(p1);
+			p1.putWeak();
+			return [quad0, quad1];
 		}
 
 		var p2 = modManager.getPos(-(vDiff + lookAhead) * speed, diff + lookAhead, curDecBeat, hold.column, modNumber, hold, this, []);
@@ -347,10 +326,19 @@ class NoteField extends FieldBase
 		var unit = p2;
 
 		var w = (quad0.subtract(quad1, quad0).length / 2) * scale;
-		var off1 = new Vector3(unit.y * w, 	-unit.x * w,	0.0);
-		var off2 = new Vector3(-off1.x, 	-off1.y,		0.0);
+		quad0.putWeak();
+		quad1.putWeak();
 
-		return [p1.add(off1, off1), p1.add(off2, off2), p1];
+		var off1 = Vector3.get(unit.y * w, 	-unit.x * w,	0.0);
+		var off2 = Vector3.get(-off1.x, 		-off1.y,		0.0);
+		var off3 = Vector3.get(p1.x, p1.y, p1.z);
+
+		off1.incrementBy(p1);
+		off2.incrementBy(p1);
+		p1.putWeak();
+		p2.putWeak();
+
+		return [off1, off2, off3];
 	}
 
 	var crotchet:Float = Conductor.getCrotchetAtTime(0.0) / 4.0;
@@ -388,9 +376,9 @@ class NoteField extends FieldBase
 
 		
 		
-		var strumDiff = (Conductor.songPosition - hold.strumTime);
+		var strumDiff = (songPosition - hold.strumTime);
 		var visualDiff = (Conductor.visualPosition - hold.visualTime); // TODO: get the start and end visualDiff and interpolate so that changing speeds mid-hold will look better
-		var sv = PlayState.instance.getSV(hold.strumTime).speed;
+		var sv = game.getSV(hold.strumTime).speed;
 
 
 /* 		var basePos = simpleDraw ? hold.vec3Cache : modManager.getPos(visualDiff, strumDiff, curDecBeat, hold.column, modNumber, hold, this,
@@ -416,17 +404,19 @@ class NoteField extends FieldBase
 		var useSpiralHolds = modManager.getValue("spiralHolds", modNumber) != 0;
 
 
+		var strumSubdivs = (crotchet / holdSubdivisions);
 		for (sub in 0...holdSubdivisions)
 		{
 			var prog = sub / (holdSubdivisions + 1);
 			var nextProg = (sub + 1) / (holdSubdivisions + 1);
-			var strumSub = (crotchet / holdSubdivisions);
-			var strumOff = (strumSub * sub);
-			strumSub *= sv;
+			var strumSub = strumSubdivs;
+			var strumOff = strumSubdivs * sub;
+			
 			strumOff *= sv;
+			strumSub *= sv;
 			
 			if ((hold.wasGoodHit || hold.parent.wasGoodHit) && !hold.tooLate) {
-				var scale:Float = 1 - ((strumDiff + crotchet) / crotchet);
+				var scale:Float = -strumDiff / crotchet;
 				if (scale <= 0.0) {
 					strumSub = 0;
 					strumOff = 0;
@@ -435,6 +425,11 @@ class NoteField extends FieldBase
 					strumOff *= scale;
 				}
 			}
+
+			var vDiff = visualDiff + (strumOff * Note.pixelsPerMS);
+			var vDiff2 = vDiff + (strumSub * Note.pixelsPerMS);
+			var diff = strumDiff + strumOff;
+			var diff2 = diff + strumSub;
 
 			scalePoint.set(1, 1);
 
@@ -446,10 +441,7 @@ class NoteField extends FieldBase
 			};
 
 			if (hold.copyAlpha)
-				info = modManager.getExtraInfo((visualDiff + ((strumOff + strumSub) * 0.45)) * -speed, strumDiff + strumOff + strumSub, curDecBeat, info, hold, modNumber, hold.column);
-
-			var topWidth = scalePoint.x * FlxMath.lerp(tWid, bWid, prog);
-			var botWidth = scalePoint.x * FlxMath.lerp(tWid, bWid, nextProg);
+				info = modManager.getExtraInfo(vDiff2 * -speed, diff2, curDecBeat, info, hold, modNumber, hold.column);
 
 			var alphaMult = hold.baseAlpha;
 
@@ -458,17 +450,19 @@ class NoteField extends FieldBase
 			
 			info.alpha *= FlxMath.lerp(alphaMult, 1, info.glow);
 
-			if(lastMe == null) // first sexment
-			{
-				var basePos = modManager.getPos(-(visualDiff + ((strumOff + strumSub) * 0.45)) * speed, strumDiff + strumOff + strumSub, curDecBeat, hold.column, modNumber, hold, this,
-					perspectiveArrDontUse, hold.vec3Cache);
-
+			if (lastMe == null) { // first sexment
+				var basePos = modManager.getPos(vDiff2 * -speed, diff2, curDecBeat, hold.column, modNumber, hold, this, perspectiveArrDontUse, hold.vec3Cache);
 				zIndex = basePos.z;
 			}
-			var top = lastMe ?? getPoints(hold, topWidth, speed, (visualDiff + (strumOff * 0.45)), strumDiff + strumOff, useSpiralHolds, lookAheadTime);
-			var bot = getPoints(hold, botWidth, speed, (visualDiff + ((strumOff + strumSub) * 0.45)), strumDiff + strumOff + strumSub, useSpiralHolds, lookAheadTime);
+
+			var topWidth = scalePoint.x * FlxMath.lerp(tWid, bWid, prog);
+			var botWidth = scalePoint.x * FlxMath.lerp(tWid, bWid, nextProg);
+
+			var top = lastMe ?? getPoints(hold, topWidth, speed, vDiff, diff, useSpiralHolds, lookAheadTime);
+			var bot = getPoints(hold, botWidth, speed, vDiff2, diff2, useSpiralHolds, lookAheadTime);
+
 			if (!hold.copyY) {
-				var a:Float = (crotchet + 1) * 0.45 * speed;
+				var a:Float = (crotchet + 1) * Note.pixelsPerMS * speed;
 				
 				if (lastMe == null) {
 					var a:Float = FlxMath.lerp(0, a, prog);
@@ -511,7 +505,10 @@ class NoteField extends FieldBase
 			vertices[subIndex + 7] = bot[1].y;
 
 			appendUV(hold, uvData, false, sub);
+
+			for (vec in top) vec.put();
 		}
+		for (vec in lastMe) vec.put();
 
 		var shader = hold.shader != null ? hold.shader : defaultShader;
 		if (shader != hold.shader)
@@ -566,7 +563,7 @@ class NoteField extends FieldBase
 		{
 			var ogTop = top;
 			top = bottom;
-			bottom = top;
+			bottom = ogTop;
 		}
 
 		switch (sprite.frame.angle) {
@@ -588,10 +585,10 @@ class NoteField extends FieldBase
 		}
 	}
 
-	private var quad0 = new Vector3(); // top left
-	private var quad1 = new Vector3(); // top right
-	private var quad2 = new Vector3(); // bottom left
-	private var quad3 = new Vector3(); // bottom right
+	private var quad0 = Vector3.get(); // top left
+	private var quad1 = Vector3.get(); // top right
+	private var quad2 = Vector3.get(); // bottom left
+	private var quad3 = Vector3.get(); // bottom right
 	function drawNote(sprite:NoteObject, pos:Vector3, ?nextPos:Vector3):Null<RenderObject>
 	{
 		if (!sprite.exists || !sprite.visible)
@@ -623,7 +620,7 @@ class NoteField extends FieldBase
 		var visPos:Float = 0;
 		if(isNote) {
 			var speed = modManager.getNoteSpeed(note, modNumber, songSpeed);
-			diff = Conductor.songPosition - note.strumTime;
+			diff = songPosition - note.strumTime;
 			visPos = -((Conductor.visualPosition - note.visualTime) * speed);
 		}
 
@@ -665,7 +662,6 @@ class NoteField extends FieldBase
 			if (nextPos != null){
 				var diffX = nextPos.x - pos.x;
 				var diffY = nextPos.y - pos.y;
-				var orient = modManager.getValue("orient", modNumber);
 
 				radAngles += Math.atan2(diffY, diffX) * orient;
 				var reverse:ReverseModifier = cast modManager.register.get("reverse");
@@ -769,6 +765,14 @@ class NoteField extends FieldBase
 		}
 	}
 
+	override function destroy() {
+		super.destroy();
+		quad0 = FlxDestroyUtil.put(quad0);
+		quad1 = FlxDestroyUtil.put(quad1);
+		quad2 = FlxDestroyUtil.put(quad2);
+		quad3 = FlxDestroyUtil.put(quad3);
+	}
+
 	function set_holdSubdivisions(to:Int)
 	{
 		HOLD_INDICES.length = (to * 6);
@@ -783,5 +787,10 @@ class NoteField extends FieldBase
 			HOLD_INDICES[intIndex + 4] = vertIndex + 2; // LB
 		}
 		return holdSubdivisions = to;
+	}
+
+	function set_modNumber(d:Int) {
+		modManager.getActiveMods(d); // generate an activemods thing if needed
+		return modNumber = d;
 	}
 }

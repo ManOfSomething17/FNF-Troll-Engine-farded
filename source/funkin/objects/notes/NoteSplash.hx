@@ -5,8 +5,9 @@ import funkin.scripts.Globals;
 import flixel.FlxG;
 import funkin.objects.shaders.NoteColorSwap;
 
-class NoteSplash extends NoteObject
-{
+using StringTools;
+
+class NoteSplash extends NoteObject {
 	private var textureLoaded:String = null;
 
 	public var animationAmount:Int = 2;
@@ -26,13 +27,14 @@ class NoteSplash extends NoteObject
 	{
 		visible = true;
 
-		if (scriptCall(note, "preSetupNoteSplash", [x, y, column, texture, hueColor, satColor, brtColor, note]) == STOP)
+		if (scriptCall(note, "onSetupNoteSplash", [x, y, column, texture, hueColor, satColor, brtColor, note]) == STOP)
 			return;
 
 		setPosition(x, y);
 		animationAmount = 2;
-		alpha = 0.6;
-		scale.set(0.8, 0.8);
+		alpha = 1.0;
+		var realScale:Float = 0.8 * (Note.spriteScales[PlayState.keyCount - 1] / 0.7);
+		scale.set(realScale, realScale);
 		updateHitbox();
 
 		this.column = column;
@@ -44,7 +46,7 @@ class NoteSplash extends NoteObject
 		}
 
 		if (textureLoaded != texture) {
-			if (scriptCall(note, "loadSplashAnims", [texture]) != STOP)
+			if (scriptCall(note, "onLoadSplashAnims", [texture]) != STOP)
 				loadAnims(texture);
 		}
 
@@ -52,24 +54,27 @@ class NoteSplash extends NoteObject
 		colorSwap.saturation = satColor;
 		colorSwap.brightness = brtColor;
 
-		if (scriptCall(note, "postSetupNoteSplash", [x, y, column, texture, hueColor, satColor, brtColor, note]) != STOP){
+		scriptCall(note, "onSetupNoteSplashPost", [x, y, column, texture, hueColor, satColor, brtColor, note]);
+		
+		if (scriptCall(note, "onPlayNoteSplashAnim", [x, y, column, texture, hueColor, satColor, brtColor, note]) != STOP){
 			var playAnim = 'note$column';
 			if (animationAmount > 1) playAnim += '-${FlxG.random.int(1, animationAmount)}';
 
 			animation.play(playAnim, true);
 			if (animation.curAnim != null) animation.curAnim.frameRate = 24 + FlxG.random.int(-2, 2);
+
+			scriptCall(note, "onPlayNoteSplashAnimPost", [x, y, column, texture, hueColor, satColor, brtColor, note]);
 		}
 	}
 
 	function loadAnims(skin:String) {
 		textureLoaded = skin;
-		frames = Paths.getSparrowAtlas(skin);
-		for (i in 1...animationAmount+1)
-		{
-			animation.addByPrefix("note0-" + i, "note splash purple " + i, 24, false);
-			animation.addByPrefix("note1-" + i, "note splash blue " + i, 24, false);
-			animation.addByPrefix("note2-" + i, "note splash green " + i, 24, false);
-			animation.addByPrefix("note3-" + i, "note splash red " + i, 24, false);
+		frames = Paths.sparrowAtlas(skin);
+		for (i in 1...animationAmount + 1) {
+			for (j in 0...PlayState.keyCount) {
+				animation.addByPrefix('note$j-$i',
+					'note splash ${currentAnimations.noteAnimations[j % currentAnimations.noteAnimations.length].replace('0', '')} $i', 24, false);
+			}
 		}
 	}
 

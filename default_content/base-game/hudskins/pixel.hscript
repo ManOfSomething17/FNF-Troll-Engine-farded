@@ -1,3 +1,5 @@
+import funkin.objects.notes.NoteAnimations;
+
 ////
 var roundTo = CoolUtil.snap;
 var timerNumsGraphic = Paths.image("pixelUI/timer-nums");
@@ -13,6 +15,8 @@ var timerSpecial;
 var curClockTxt = null;
 
 var isSetup = false;
+
+var noteScale = (Note.spriteScales[PlayState.keyCount - 1] / 0.7);
 
 ///// hud skin script functions /////
 
@@ -154,87 +158,43 @@ function makeCountdownSprite(sprImage, swagCounter){
 }
 
 function setupNoteTexture(note:Note){
-	if(note.isSustainNote)
-		note.reloadNote('NOTE_assets', note.texSuffix + 'ENDS', 'pixelUI', 4, 2);
-	else
-		note.reloadNote('NOTE_assets', note.texSuffix, 'pixelUI', 4, 5);
-
-	note.scale.set(6, 6);
+	note.reloadNote('NOTE_assets', note.texSuffix, 'pixelUI');
+	note.scale.set(noteScale * 6.0, noteScale * 6.0);
 	note.antialiasing = false;
 }
 
 function setupReceptorTexture(strum:StrumNote){
-	strum.isQuant = false;
-	
-	var lastAnim:String = null;
-	if (strum.animation.curAnim != null) 
-		lastAnim = strum.animation.curAnim.name;
-	
-	var br:String = 'NOTE_assets';
-	
-	var arrowSkin = PlayState.SONG.arrowSkin;
-	if (Paths.imageExists("pixelUI/" + arrowSkin))
-		br = arrowSkin;
-	
-	if (ClientPrefs.noteSkin == 'Quants') {
-		if (Paths.imageExists("pixelUI/QUANT"+br)) {
-			br = "QUANT" + br;
-			strum.isQuant = true;
-		}
-	}
-	
-	// TODO: add an easy way to do indices for strums
-
-	var graphic = Paths.image("pixelUI/" + br);
-	strum.loadGraphic(graphic, true, Math.floor(graphic.width / 4), Math.floor(graphic.height / 5));
-	strum.animation.add('static', [strum.noteData]);
-	strum.animation.add('pressed', [strum.noteData + 4, strum.noteData + 8], 12, false);
-	strum.animation.add('confirm', [strum.noteData + 12, strum.noteData + 16], 16, false);
-	strum.playAnim("static", true);
+	strum.reloadNote('NOTE_assets', strum.texSuffix, 'pixelUI');
 	strum.antialiasing = false;
 
-	strum.scale.set(6, 6);    
+	var ns = noteScale * 6.0;
+	strum.scale.set(ns, ns);    
 	strum.updateHitbox();
-
-	strum.defScale.x = strum.scale.x;
-	strum.defScale.y = strum.scale.y;
-	
-	if(lastAnim != null)
-	{
-		strum.playAnim(lastAnim, true);
-	}
+	strum.defScale.set(ns, ns);
 }
 
-
-var suffixes = [
-	"left",
-	"down",
-	"up",
-	"right"
-];
-
-function preSetupNoteSplash(x, y, column, texture, hueColor, satColor, brtColor, note){
+function onSetupNoteSplash(x, y, column, texture, hueColor, satColor, brtColor, note){
 	if(this.textureLoaded == texture && !StringTools.startsWith(texture, "pixelUI") && Paths.imageExists("pixelUI/" + texture)){
 		this.textureLoaded = 'pixelUI/' + texture;
 	}
 }
 
-function loadSplashAnims(texture){
-	this.frames = Paths.getSparrowAtlas('pixelUI/' + texture);
-	this.animation.addByPrefix("splash", "note splash " + suffixes[column % 4] + " " + FlxG.random.int(1, 2), 24, false);
-	this.scale.set(5, 5);
+function onLoadSplashAnims(texture){
+	this.frames = Paths.sparrowAtlas('pixelUI/' + texture);
+	this.animation.addByPrefix('splash', 'note splash ' + StringTools.replace(NoteAnimations.current.noteAnimations[column %  NoteAnimations.current.noteAnimations.length], '0', '') + ' ' + FlxG.random.int(1, this.animationAmount), 24, false);
+	this.scale.set(noteScale * 5.0, noteScale * 5.0);
 	this.antialiasing = false;
 	this.updateHitbox();
 	return Function_Stop;
 }
 
 
-function postSetupNoteSplash(x, y, column, texture, hueColor, satColor, brtColor, note){
+function onPlayNoteSplashAnim(x, y, column, texture, hueColor, satColor, brtColor, note){
 	this.animation.play("splash", true);
 	return Function_Stop;
 }
 
-function optionsChanged(changed:Array)
+function onOptionsChanged(changed:Array)
 {
 	if (rosesHealthBar && changed.contains("downScroll")){
 		adjustHealthBar();

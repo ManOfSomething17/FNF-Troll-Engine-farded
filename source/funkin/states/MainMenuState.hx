@@ -5,7 +5,7 @@ import flixel.FlxG;
 import flixel.FlxObject;
 import flixel.FlxSprite;
 import flixel.FlxCamera;
-import flixel.addons.transition.FlxTransitionableState;
+import funkin.states.base.TransitionableState;
 import flixel.effects.FlxFlicker;
 import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.text.FlxText;
@@ -53,13 +53,10 @@ class MainMenuState extends MusicBeatState
 		#end
 		debugKeys = ClientPrefs.copyKey(ClientPrefs.keyBinds.get('debug_1'));
 
-		transIn = FlxTransitionableState.defaultTransIn;
-		transOut = FlxTransitionableState.defaultTransOut;
-
 		persistentUpdate = persistentDraw = true;
 
-		camFollow = new FlxObject(0, 0, 1, 1);
-		camFollowPos = new FlxObject(0, 0, 1, 1);
+		camFollow = new FlxObject();
+		camFollowPos = new FlxObject();
 		add(camFollow);
 		add(camFollowPos);
 
@@ -74,24 +71,24 @@ class MainMenuState extends MusicBeatState
 		bg.scale.x = bg.scale.y = 1.175;
 		add(bg);
 
-		magenta = new FlxSprite(0, 0, Paths.image('menuDesat'));
+		magenta = new FlxSprite(0, 0, Paths.image('menuBGMagenta'));
 		magenta.scrollFactor.set(0, yScroll);
 		magenta.screenCenter();
 		magenta.scale.x = magenta.scale.y = bg.scale.x;
 		magenta.visible = false;
-		magenta.color = 0xFFfd719b;
 		add(magenta);
 
 		menuItems = new FlxTypedGroup<FlxSprite>();
 		add(menuItems);
 
-		var offset:Float = 108 - (Math.max(optionShit.length, 4) - 4) * 80;
+		var spacing:Float = 140;
+		var offset:Float = 108 - Math.max(optionShit.length - 4, 0) * 80;
 		var scr:Float = (optionShit.length < 6) ? 0 : (optionShit.length - 4) * 0.135;
 		for (i => optionName in optionShit)
 		{
-			var menuItem:FlxSprite = new FlxSprite(0, (i * 140) + offset);
+			var menuItem:FlxSprite = new FlxSprite(0, offset + (i * spacing));
 			
-			menuItem.frames = Paths.getSparrowAtlas('mainmenu/$optionName');
+			menuItem.frames = Paths.sparrowAtlas('mainmenu/$optionName');
 			menuItem.animation.addByPrefix('idle', '$optionName idle', 24);
 			menuItem.animation.addByPrefix('selected', '$optionName selected', 24);
 			menuItem.animation.play('idle');
@@ -104,12 +101,7 @@ class MainMenuState extends MusicBeatState
 			menuItems.add(menuItem);
 		}
 
-		var versionShit:FlxText = new FlxText(12, FlxG.height - 44, 0, 'Troll Engine ' + Main.Version.displayedVersion, 12);
-		versionShit.scrollFactor.set();
-		versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		add(versionShit);
-
-		var versionShit:FlxText = new FlxText(12, FlxG.height - 24, 0, "Friday Night Funkin' v" + Application.current.meta.get('version'), 12);
+		var versionShit:FlxText = new FlxText(12, FlxG.height - 24, 0, 'Troll Engine ' + Main.Version.displayedVersion, 12);
 		versionShit.scrollFactor.set();
 		versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(versionShit);
@@ -203,20 +195,39 @@ class MainMenuState extends MusicBeatState
 
 	override function update(elapsed:Float)
 	{
-		var lerpVal:Float = CoolUtil.boundTo(elapsed * 7.5, 0, 1);
-		camFollowPos.setPosition(FlxMath.lerp(camFollowPos.x, camFollow.x, lerpVal), FlxMath.lerp(camFollowPos.y, camFollow.y, lerpVal));
+		var lerpVal:Float = Math.exp(-elapsed * 7.5);
+		camFollowPos.setPosition(
+			FlxMath.lerp(camFollow.x, camFollowPos.x, lerpVal),
+			FlxMath.lerp(camFollow.y, camFollowPos.y, lerpVal)
+		);
 
 		if (!selectedSomethin)
 		{
 			if (controls.UI_UP_P)
 			{
-				changeItem(-1);
+				#if FLX_MOUSE
+				FlxG.mouse.visible = false;
+				#end
+				changeSelection(-1);
 			}
 
 			if (controls.UI_DOWN_P)
 			{
-				changeItem(1);
+				#if FLX_MOUSE
+				FlxG.mouse.visible = false;
+				#end
+				changeSelection(1);
 			}
+
+			#if FLX_MOUSE
+			if (FlxG.mouse.deltaScreenX != 0 || FlxG.mouse.deltaScreenY != 0)
+			{
+				FlxG.mouse.visible = true;
+				var newIndex = checkMouseOverlap();
+				if (newIndex != -1 && newIndex != curSelected)
+					changeSelection(newIndex, true);
+			}
+			#end
 
 			if (controls.BACK)
 			{
@@ -228,11 +239,22 @@ class MainMenuState extends MusicBeatState
 			{
 				onSelected();
 			}
+			#if FLX_MOUSE
+			else if (FlxG.mouse.justPressed)
+			{
+				var newIndex = checkMouseOverlap();
+				if (newIndex != -1) {
+					if (newIndex != curSelected)
+						changeSelection(newIndex, true);
+					onSelected();
+				}
+			}
+			#end
 			#if desktop
 			else if (FlxG.keys.anyJustPressed(debugKeys))
 			{
 				selectedSomethin = true;
-				FlxTransitionableState.skipNextTransOut = true;
+				TransitionableState.skipNextTransOut = true;
 				switchState(new MasterEditorMenu());
 			}
 			#end
@@ -251,20 +273,56 @@ class MainMenuState extends MusicBeatState
 			}
 		}
 
+		#if FLX_MOUSE
+		if (selectedSomethin)
+			FlxG.mouse.visible = false;
+		#end
+
 		super.update(elapsed);
 	}
 
-	function changeItem(huh:Int = 0)
-	{
-		if (huh != 0)
-			FlxG.sound.play(Paths.sound('scrollMenu'));
-		
-		curSelected += huh;
+	function checkMouseOverlap():Int {
+		var newIndex:Int = -1;
 
-		if (curSelected >= menuItems.length)
-			curSelected = 0;
-		if (curSelected < 0)
-			curSelected = menuItems.length - 1;
+		#if FLX_MOUSE
+		var closestDistance:Float = -1;
+		var mousePos = FlxG.mouse.getPositionInCameraView();
+		var objBounds = flixel.math.FlxRect.get();
+		var objPos = flixel.math.FlxPoint.get();
+
+		for (obj in menuItems) {
+			obj.getScreenBounds(objBounds);
+
+			// Check if the mouse overlaps the object
+			if (!objBounds.containsPoint(mousePos))
+				continue;
+
+			// Get object midpoint
+			objPos.set(objBounds.x + objBounds.width * 0.5, objBounds.y + objBounds.height * 0.5);
+
+			var distance = objPos.distanceTo(mousePos);
+			if (closestDistance == -1 || distance < closestDistance) {
+				newIndex = obj.ID;
+				closestDistance = distance;
+			}
+		}
+
+		mousePos.put();
+		objBounds.put();
+		objPos.put();
+		#end
+
+		return newIndex;
+	}
+
+	function changeSelection(value:Int = 0, isAbs:Bool = false)
+	{
+		var prevSelected = curSelected;
+
+		curSelected = isAbs ? value : CoolUtil.updateIndex(curSelected, value, menuItems.length);
+
+		if (curSelected != prevSelected)
+			FlxG.sound.play(Paths.sound('scrollMenu'));
 
 		menuItems.forEach((spr:FlxSprite)->{
 			if (spr.ID == curSelected) {
@@ -272,11 +330,18 @@ class MainMenuState extends MusicBeatState
 				spr.centerOffsets();
 
 				var add:Float = (menuItems.length > 4) ? (menuItems.length * 8) : 0;
-				camFollow.setPosition(spr.getGraphicMidpoint().x, spr.getGraphicMidpoint().y - add);
+				var mid = spr.getGraphicMidpoint();
+				camFollow.setPosition(mid.x, mid.y - add);
+				mid.put();
 			}else {
 				spr.animation.play('idle');
 				spr.updateHitbox();
 			}
 		});
 	}
+
+	#if ALLOW_DEPRECATION
+	@:deprecated inline function changeItem(huh:Int = 0)
+		changeSelection(huh);
+	#end
 }

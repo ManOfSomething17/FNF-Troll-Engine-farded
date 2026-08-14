@@ -1,5 +1,6 @@
 package funkin.states.scripting;
 
+import funkin.scripts.ScriptedClassShit.InstanceInterp;
 import funkin.scripts.FunkinHScript;
 
 class HScriptedSubstate extends MusicBeatSubstate
@@ -19,13 +20,13 @@ class HScriptedSubstate extends MusicBeatSubstate
 				vars[k] = v;
 		}
 
-		_extensionScript = FunkinHScript.fromFile(scriptPath, scriptPath, vars, false);
+		_extensionScript = FunkinHScript.fromFile(scriptPath, scriptPath, vars, false, new InstanceInterp(this));
 		_extensionScript.call("new", []);
 	}
 
 	static public function fromFile(name:String, ?scriptVars:Map<String, Dynamic>)
 	{
-		for (filePath in Paths.getFolders("substates"))
+		for (filePath in Paths.getFolders("states"))
 		{
 			for(ext in Paths.HSCRIPT_EXTENSIONS){
 				var fullPath = filePath + '$name.$ext';

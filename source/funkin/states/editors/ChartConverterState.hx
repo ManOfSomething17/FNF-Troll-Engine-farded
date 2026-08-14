@@ -3,14 +3,13 @@ package funkin.states.editors;
 #if USING_MOONCHART
 import funkin.states.base.Prompt;
 
-import lime.ui.FileDialog;
-import lime.utils.Resource;
-import lime.system.System;
 import sys.FileSystem;
 import haxe.io.Path;
+import funkin.util.FileUtil;
 
 import flixel.util.FlxColor;
 import flixel.text.FlxText;
+import flixel.group.FlxSpriteGroup;
 import flixel.addons.ui.FlxUIText;
 import flixel.addons.ui.FlxUITypedButton;
 import flixel.addons.ui.FlxUIButton;
@@ -23,7 +22,7 @@ import moonchart.backend.FormatDetector;
 import moonchart.formats.BasicFormat;
 import moonchart.formats.BasicFormat.DynamicFormat;
 
-class ChartConverterState extends MusicBeatState
+class ChartConverterState extends funkin.states.base.CustomFlxUIState
 {
 	var formatList:Array<Format>;
 	
@@ -34,9 +33,6 @@ class ChartConverterState extends MusicBeatState
 	var goalSupportsDiffs:Bool;
 	var metaPath:String;
 	var chartPaths:Array<String>;
-
-	var chartDialog:FileDialog;
-	var metaDialog:FileDialog;
 
 	////
 	var infoText:FlxText;
@@ -52,16 +48,10 @@ class ChartConverterState extends MusicBeatState
 		bg.screenCenter();
 		add(bg);
 
-		chartDialog = new FileDialog();
-		chartDialog.onSelectMultiple.add(onSelectChartFiles);
-
-		metaDialog = new FileDialog();
-		metaDialog.onSelectMultiple.add(onSelectMetaFiles);
-
-		var x = FlxG.width / 3 - 200;
-		var y = FlxG.height / 2;
+		var x = 0;
+		var y = 0;
 		
-		var x2 = x + x;
+		var x2 = 226;
 		
 		formatList = FormatDetector.getList();
 		var formatList2 = FlxUIDropDownMenu.makeStrIdLabelArray(formatList, true);
@@ -72,9 +62,11 @@ class ChartConverterState extends MusicBeatState
 
 		var selectMetaButt = new FlxUIButton(fromFormatDD.x + fromFormatDD.width + 15, fromFormatDD.y, "Browse Metadata");
 		selectMetaButt.name = "selectMetaButt";
+		selectMetaButt.label.color = 0xFFFFFFFF;
 
 		var selectChartsButt = new FlxUIButton(selectMetaButt.x, selectMetaButt.y + 40, "Browse Charts");
 		selectChartsButt.name = "selectChartsButt";
+		selectChartsButt.label.color = 0xFFFFFFFF;
 
 		////
 		var goalFormatDD = new FlxUIDropDownMenu(x2, y, formatList2);
@@ -83,6 +75,7 @@ class ChartConverterState extends MusicBeatState
 
 		var convertFilesButt = new FlxUIButton(goalFormatDD.x + goalFormatDD.width + 15, goalFormatDD.y, "Convert");
 		convertFilesButt.name = "convertFilesButt";
+		convertFilesButt.label.color = 0xFFFFFFFF;
 
 		////
 		infoText = new FlxText(15, 15);
@@ -94,18 +87,24 @@ class ChartConverterState extends MusicBeatState
 		this.add(moonchartVer); 
 
 		////
-		this.add(new FlxText(fromFormatDD.x, fromFormatDD.y - 15, 0, 'Input Format'));
-		this.add(fromFormatDD);
+		var grp = new FlxSpriteGroup();
 
-		this.add(selectMetaButt);
+		grp.add(new FlxText(fromFormatDD.x, fromFormatDD.y - 15, 0, 'Input Format'));
+		grp.add(fromFormatDD);
+
+		grp.add(selectMetaButt);
 		
-		this.add(selectChartsButt);
+		grp.add(selectChartsButt);
 
 		////
-		this.add(new FlxText(goalFormatDD.x, goalFormatDD.y - 15, 0, 'Output Format'));
-		this.add(goalFormatDD);
+		grp.add(new FlxText(goalFormatDD.x, goalFormatDD.y - 15, 0, 'Output Format'));
+		grp.add(goalFormatDD);
 
-		this.add(convertFilesButt);
+		grp.add(convertFilesButt);
+
+		grp.x = Std.int((FlxG.width - grp.width) / 2);
+		grp.y = Std.int((FlxG.height - (fromFormatDD.y + fromFormatDD.height)) / 2);
+		this.add(grp);
 	}
 
 	function updateInfoText() {
@@ -154,9 +153,9 @@ class ChartConverterState extends MusicBeatState
 			case FlxUITypedButton.CLICK_EVENT:
 				switch(sender.name) {
 					case 'selectMetaButt':
-						metaDialog.browse(OPEN_MULTIPLE);
+						FileUtil.showOpenMultipleDialog(onSelectMetaFiles);
 					case 'selectChartsButt':
-						chartDialog.browse(OPEN_MULTIPLE);
+						FileUtil.showOpenMultipleDialog(onSelectChartFiles);
 					case 'convertFilesButt':
 						convert();
 				}
@@ -290,9 +289,8 @@ class ChartConverterState extends MusicBeatState
 		openSubState(new Prompt(
 			'Files have been saved to the "moonchartConverted/" folder', 
 			0,
-			lime.system.System.openFile.bind(CoolUtil.getSystemPath("moonchartConverted/")),
+			lime.system.System.openFile.bind(FileUtil.getSystemPath("moonchartConverted/")),
 			null,
-			false,
 			'Open Folder',
 			'OK'
 		));

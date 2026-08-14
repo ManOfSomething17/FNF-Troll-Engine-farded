@@ -15,10 +15,26 @@ using StringTools;
 // NEW: Now also has some features of mirin (aliases, nodes)
 
 /**
- * So, what is a Node?
- * A Node can be used to extend or otherwise modify modifiers
- * (for example you can have a screen bounce aux mod + node w/ that aux mod as an input, and then change transformX)
- */
+	A Node can be used to extend or otherwise modify modifiers  
+	Node functions only get called if one of its input mods are active.  
+
+	For example, you can have a screen bounce aux mod + a node w/ that aux mod as an input, and then change transformX 
+	```
+	function onModifierRegisterPost() {
+		modManager.registerAux("screen_bounce");
+		modManager.registerNode({
+			in_mods: ["screen_bounce", "transformX"], 
+			out_mods: ["transformX"],
+			nodeFunc: function(inputs:Array<Float>, player:Int) {
+				var bounceVal = inputs[0];
+				var x = inputs[1];
+				x += 0.0; // <-- do something cool to the x value here ^.^
+				return [x];
+			}
+		});
+	}
+	```
+**/
 typedef Node = {
 	/**
 		Modifiers that get input into this node
@@ -85,7 +101,7 @@ class ModManager {
 	
 	public function registerDefaultModifiers()
 	{
-		var quickRegs:Array<Any> = [
+		var quickRegs:Array<Class<Modifier>> = [
 			ReverseModifier,
 			SwapModifier,
 			DrunkModifier,
@@ -109,7 +125,7 @@ class ModManager {
 			quickRegister(Type.createInstance(mod, [this]));
 
 		quickRegister(new RotateModifier(this));
-		quickRegister(new RotateModifier(this, 'center', new Vector3(FlxG.width* 0.5, FlxG.height* 0.5)));
+		quickRegister(new RotateModifier(this, 'center', Vector3.get(FlxG.width* 0.5, FlxG.height* 0.5)));
 		quickRegister(new LocalRotateModifier(this, 'local'));
 
 		registerAux("alwaysDraw");
@@ -222,8 +238,7 @@ class ModManager {
 		aliases.set(alias, mod);
 
 	public function registerNode(node:Node){
-		var inputs = node.in_mods;
-		for(inp in inputs){
+		for (inp in node.in_mods){
 			if(!nodes.exists(inp))
 				nodes.set(inp, []);
 			
@@ -232,12 +247,10 @@ class ModManager {
 		nodeArray.push(node);
 	}
 
-	public function quickNode(inputs:Array<String>, nodeFunc:(Array<Float>, Int) -> Array <Float>, ?outputs:Array<String>){
-		if (outputs == null)
-			outputs=[];
+	public function quickNode(inputMods:Array<String>, nodeFunc:(values:Array<Float>, player:Int) -> Array<Float>, ?outputMods:Array<String>){
 		registerNode({
-			in_mods: inputs,
-			out_mods: outputs,
+			in_mods: inputMods,
+			out_mods: outputMods ?? [],
 			nodeFunc: nodeFunc
 		});
 	}
@@ -437,8 +450,8 @@ class ModManager {
 					// before discarding we should be checking for submods and if THEY can execute
 					// if they can execute then we shouldnt be discarding this mod since the parent mod executes the logic for submods
 
-					for(submod_name => submod in mod.submods){
-						if (submod.shouldExecute(player, submod.getValue(player))){
+					for (submod in mod.submods) {
+						if (submod.shouldExecute(player, submod.getValue(player))) {
 							can_discard = false; // we CANNOT discard since a submod can execute still
 							break;
 						}
@@ -458,20 +471,24 @@ class ModManager {
 			}
 		}
 
+		inline function sortActiveMods(){
+			active_mods.sort((a, b) -> Std.int(get(a).getOrder() - get(b).getOrder()));
+		}
+
 		// remove all inactive mods (we do it after pushing new ones so that we dont end up checking mods we KNOW arent executing)
 		for (mod_name in discarded_mods){
 			//trace("discarded " + mod_name + " for " + player);
 			active_mods.remove(mod_name);
+			sortActiveMods();
 		}
 		
 		for (mod in activated_mods){
 			if(!active_mods.contains(mod)){ // prob a redundant check but better safe than sorry
 				active_mods.push(mod);
+				sortActiveMods();
 				//trace("activated " + mod + " for " + player);
 			}
 		}
-		
-		active_mods.sort((a, b) -> Std.int(get(a).getOrder() - get(b).getOrder()));
 	}
 
 	function runNodes()
@@ -558,16 +575,26 @@ class ModManager {
 	public var playerOOBIsCentered:Bool = true; // Player Out of Bounds is centered
 	public var vPadding:Float = 45;
 
-	public function getBaseX(direction:Int, player:Float, receptorAmount:Int = 4):Float
+	public function getBaseX(column:Int, player:Float, totalColumns:Int = 4):Float
 	{
 		if (playerOOBIsCentered && (player >= playerAmount || player < 0))
 			player = (playerAmount - 1) * 0.5; // replicating old behaviour for upcoming modcharts
-		
-		var spaceWidth = FlxG.width / playerAmount;
-		var spaceX = spaceWidth * (playerAmount-1-player);
 
-		var baseX:Float = spaceX + (spaceWidth - Note.swagWidth * receptorAmount) * 0.5;
-		var x:Float = baseX + Note.swagWidth * direction;
+		return _getBaseX(playerAmount, player, column, totalColumns);
+	}
+
+	public static function _getBaseX(totalPlayers:Int, player:Float, column:Int, totalColumns:Int = 4):Float
+	{	
+		var spaceWidth = FlxG.width / totalPlayers;
+		var spaceX = spaceWidth * (totalPlayers-1-player);
+
+		// how much the note gap should scale by
+		// pushes notes closer together on higher keycounts to make them look less ugly
+		// does not go over 1 to prevent keycounts less than 4 from getting an increased gap, which they dont need.
+		var noteGapMult = Math.min(1, 1 - (1 / 30) * (totalColumns - 4));
+
+		var baseX:Float = spaceX + (spaceWidth - Note.swagWidth * (totalColumns * noteGapMult)) * 0.5 * noteGapMult;
+		var x:Float = baseX + Note.swagWidth * (column * noteGapMult);
 
 		return x;
 	}
@@ -608,8 +635,7 @@ class ModManager {
 		if (exclusions == null) 
 			exclusions = []; // since [] cant be a default value for.. some reason?? "its not constant!!" kys haxe
 		
-		if (pos == null)
-			pos = new Vector3();
+		pos ??= Vector3.weak();
 
 		var speed:Float = if (obj.objType == NOTE)
 			getNoteSpeed(cast obj, player, field.songSpeed);
@@ -619,7 +645,7 @@ class ModManager {
 		diff += getValue("transformPath", player);
 		diff += getValue("movePath", player) * FlxMath.lerp(
 			Note.swagWidth,
-			Conductor.crotchet * 0.45 * speed,
+			Conductor.crotchet * Note.pixelsPerMS * speed, 
 			getValue("movePathType", player)
 		);
 		

@@ -1,12 +1,6 @@
 package funkin.scripts;
 
-import haxe.CallStack;
-#if USING_FLXANIMATE
-import animate.FlxAnimate;
-import animate.FlxAnimateFrames;
-#end
 import funkin.scripts.FunkinScript.ScriptType;
-import funkin.objects.IndependentVideoSprite;
 import funkin.scripts.*;
 import funkin.scripts.Globals.*;
 
@@ -48,31 +42,68 @@ class FunkinHScript extends FunkinScript
 		
 	}
 
-	inline public static function parseString(script:String, ?name:String = "Script"):Null<Expr>
+	public static function _parseString(script:String, ?name:String = "Script"):Expr
 	{
 		parser.line = 1;
 		return parser.parseString(script, name);
 	}
 
-	inline public static function parseFile(file:String, ?name:String):Null<Expr>
-		return parseString(Paths.getContent(file), (name == null ? file : name));
-
-	public static function blankScript(?name, ?additionalVars)
+	public static function parseString(script:String, ?name:String = "Script"):Null<Expr>
 	{
-		return new FunkinHScript(null, name, additionalVars, false);
+		try {
+			return _parseString(script, name);
+		}
+		catch (e:haxe.Exception) {
+			var errMsg = 'Error parsing hscript! ' #if hscriptPos + '$name:' + parser.line + ', ' #end + e.message;
+			trace(errMsg);
+
+			#if desktop
+			Application.current.window.alert(errMsg, "Error on haxe script!");
+			#end
+		}
+
+		return null;
 	}
 
-	/**
-		Creates a `FunkinHScript` instance with code from a string.  
+	public static function parseFile(file:String, ?name:String):Null<Expr>
+	{
+		try {
+			var fileContent = Paths.getContent(file);
+			if (fileContent != null) {
+				//print('Loading haxe script from: $file');
+				return _parseString(fileContent, name ?? file);
+			}else {
+				//print('HScript file "$file" not found!');
+			}
+		}
+		catch(e:haxe.Exception) {
+			var msg = "Error parsing hscript! " + e.message;
+			print(e.message);
 
-		@param script The script code.
-		@param name An optional name to give the script.
-		@param additionalVars A map of variables to define on this script before running its code.
-		@param doCreateCall Whether to call `onCreate` on this script.
-		@returns A `FunkinHScript` instance.
-	**/
-	public static function _fromString(script:String, ?name:String = "Script", ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true):FunkinHScript
-		return new FunkinHScript(parseString(script, name), name, additionalVars, doCreateCall);
+			#if desktop
+			var title = "Error parsing haxe script!";
+
+			#if (cpp && windows)
+			if (Windows.msgBox(msg, title, RETRYCANCEL | ERROR) == RETRY)
+				return parseFile(file, name);
+			#else
+			Application.current.window.alert(msg, title);
+			#end
+			#end
+		}
+
+		return null;
+	}
+
+	public static inline function blankScript(?name, ?additionalVars, ?interp:Interp)
+	{
+		return new FunkinHScript(null, name, additionalVars, false, interp);
+	}
+
+	public static inline function fromExpr(parsed:Expr, ?name:String, ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true, ?interp:Interp):Null<FunkinHScript>
+	{
+		return new FunkinHScript(parsed, name, additionalVars, doCreateCall, interp);
+	}
 
 	/**
 		Creates a `FunkinHScript` instance with code from a string.  
@@ -84,21 +115,9 @@ class FunkinHScript extends FunkinScript
 		@param doCreateCall Whether to call `onCreate` on this script.
 		@returns A `FunkinHScript` instance.
 	**/
-	public static function fromString(script:String, ?name:String = "Script", ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true):FunkinHScript
+	public static inline function fromString(script:String, ?name:String = "Script", ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true, ?interp:Interp):Null<FunkinHScript>
 	{
-		try {
-			return _fromString(script, name, additionalVars, doCreateCall);
-		}
-		catch (e:haxe.Exception) {
-			var errMsg = 'Error parsing hscript! ' #if hscriptPos + '$name:' + parser.line + ', ' #end + e.message;
-			trace(errMsg);
-
-			#if desktop
-			Application.current.window.alert(errMsg, "Error on haxe script!");
-			#end
-		}
-
-		return new FunkinHScript(null, name, additionalVars, doCreateCall);
+		return fromExpr(parseString(script, name), name, additionalVars, doCreateCall, interp);
 	}
 
 	/**
@@ -111,36 +130,19 @@ class FunkinHScript extends FunkinScript
 		@param doCreateCall Whether to call `onCreate` on this script.
 		@returns A `FunkinHScript` instance.
 	**/
-	public static function fromFile(file:String, ?name:String, ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true):FunkinHScript
+	public static inline function fromFile(file:String, ?name:String, ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true, ?interp:Interp):Null<FunkinHScript>
 	{
-		name ??= file;
+		return fromExpr(parseFile(file, name), name, additionalVars, doCreateCall, interp);
+	}
 
-		try {
-			var fileContent = Paths.getContent(file);
-			if (fileContent != null) {
-				print('Loading haxe script from: $file');
-				return _fromString(fileContent, name, additionalVars, doCreateCall);
-			}else {
-				print('HScript file: "$file" not found!');
-			}
-		}
-		catch(e:haxe.Exception) {
-			var msg = "Error parsing hscript! " + e.message;
-			print(e.message);
-
-			#if desktop
-			var title = "Error on haxe script!";
-
-			#if (cpp && windows)
-			if (Windows.msgBox(msg, title, RETRYCANCEL | ERROR) == RETRY)
-				return fromFile(file, name, additionalVars, doCreateCall);
-			#else
-			Application.current.window.alert(msg, title);
-			#end
-			#end
-		}
-
-		return new FunkinHScript(null, name, additionalVars, doCreateCall);
+	public static function fromName(key:String, ?name:String, ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true, ?interp:Interp):Null<FunkinHScript>
+	{
+		var file = Paths.getHScriptPath(key);
+		if (file != null)
+			return fromFile(file, name, additionalVars, doCreateCall, interp);
+		
+		print('HScript file "$key" not found!');
+		return null;
 	}
 
 	private static inline function trim_redundant_error_trace(message:String, posInfo:haxe.PosInfos):String
@@ -154,10 +156,11 @@ class FunkinHScript extends FunkinScript
 	}
 
 	////
-	private var interpreter(default, null):Interp = new Interp();
+	private var interpreter(default, null):Interp;
 
-	public function new(?parsed:Expr, ?name:String = "HScript", ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true)
+	public function new(?parsed:Expr, ?name:String = "HScript", ?additionalVars:Map<String, Any>, ?doCreateCall:Bool = true, ?interp:Interp)
 	{
+		interpreter = interp ??= new Interp();
 		super(name, ScriptType.HSCRIPT);
 
 		set("Std", Std);
@@ -183,12 +186,13 @@ class FunkinHScript extends FunkinScript
 		set("print", print);
 		
 		set("script", this);
+		set("funkinScript", this);
+
 		set("global", Globals.variables);
 		set("FunkinHScript", FunkinHScript);
 
 		setDefaultVars();
 		setFlixelVars();
-		setVideoVars();
 		setFNFVars();
 
 		for (variable => arg in defaultVars)
@@ -201,6 +205,7 @@ class FunkinHScript extends FunkinScript
 		}
 
 		if (parsed != null){
+			print('Running haxe script ${parsed.origin}');
 			run(parsed);
 			
 			if (doCreateCall)
@@ -226,11 +231,9 @@ class FunkinHScript extends FunkinScript
 				currentState.addTextToDebug(toPrint.join(', '));
 			});
 
-			set("getInstance", getInstance);
 			set("debugPrint", debugPrint);
 
 		}else{
-			set("getInstance", @:privateAccess FlxG.get_state);
 			set("debugPrint", get("trace"));
 			
 		}
@@ -245,6 +248,7 @@ class FunkinHScript extends FunkinScript
 		set("FlxText", flixel.text.FlxText);
 		set("FlxMath", flixel.math.FlxMath);
 		set("FlxGroup", flixel.group.FlxGroup);
+		set("FlxSpriteGroup", flixel.group.FlxSpriteGroup);
 		set("FlxTween", flixel.tweens.FlxTween);
 		set("FlxEase", flixel.tweens.FlxEase);
 		set("FlxTimer", flixel.util.FlxTimer);
@@ -261,8 +265,13 @@ class FunkinHScript extends FunkinScript
 		set("FlxRuntimeShader", flixel.addons.display.FlxRuntimeShader);
 		#end
 		#if USING_FLXANIMATE
-		set("FlxAnimate", FlxAnimate);
-		set("FlxAnimateFrames", FlxAnimateFrames);
+		set("FlxAnimate", animate.FlxAnimate);
+		set("FlxAnimateFrames", animate.FlxAnimateFrames);
+		set("FlxSpriteElement", animate.internal.elements.FlxSpriteElement);
+		#end
+		#if VIDEOS_ALLOWED
+		set("FlxVideo", hxvlc.flixel.FlxVideo);
+		set("FlxVideoSprite", hxvlc.flixel.FlxVideoSprite);
 		#end
 		// Enums
 		set("FlxBarFillDirection", flixel.ui.FlxBar.FlxBarFillDirection);
@@ -276,46 +285,8 @@ class FunkinHScript extends FunkinScript
 		set("FlxAxes", Wrappers.FlxAxes);
 		set("FlxColor", Wrappers.SowyColor);
 		set("FlxPoint", Wrappers.FlxPoint);
-	}
 
-	private function setVideoVars() {
-		// TODO: create a compatibility wrapper for the various versions
-		// (so you can use any version of hxcodec and use the same versions)
-
-		#if !VIDEOS_ALLOWED
-		set("hxcodec", "0");
-		set("MP4Handler", null);
-		set("MP4Sprite", null);
-		#else
-		#if (hxCodec >= "3.0.0")
-		set("hxcodec", "3.0.0");
-		set("MP4Handler", hxcodec.flixel.FlxVideo);
-		set("MP4Sprite", hxcodec.flixel.FlxVideoSprite); // idk how hxcodec 3.0.0 works :clueless:
-		#elseif (hxCodec >= "2.6.1")
-		set("hxcodec", "2.6.1");
-		set("MP4Handler", hxcodec.VideoHandler);
-		set("MP4Sprite", hxcodec.VideoSprite);
-		#elseif (hxCodec == "2.6.0")
-		set("hxcodec", "2.6.0");
-		set("MP4Handler", VideoHandler);
-		set("MP4Sprite", VideoSprite);
-		#elseif (hxCodec)
-		set("hxcodec", "1.0.0");
-		set("MP4Handler", vlc.MP4Handler);
-		set("MP4Sprite", vlc.MP4Sprite);
-		#else
-		set("hxcodec", "0");
-		#end
-		#if (hxvlc)
-		set("hxvlc", "1.0.0");
-		set("MP4Handler", hxvlc.flixel.FlxVideo);
-		set("MP4Sprite", hxvlc.flixel.FlxVideoSprite);
-		#else
-		set("hxvlc", "0");
-		#end
-		#end	
-		set("VideoSprite", IndependentVideoSprite); // Should use this in future !
-
+		set("ShaderFilter", openfl.filters.ShaderFilter);
 	}
 
 	private function setFNFVars() {

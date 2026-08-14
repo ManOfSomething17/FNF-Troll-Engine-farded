@@ -1,5 +1,11 @@
 package funkin.objects.ui;
 
+import flixel.util.FlxColor;
+import flixel.addons.ui.FlxUI9SliceSprite;
+import flixel.addons.ui.FlxUIButton;
+import flixel.addons.ui.StrNameLabel;
+import flixel.addons.ui.FlxUIDropDownMenu;
+import openfl.events.KeyboardEvent;
 import flixel.addons.ui.FlxUISlider;
 import flixel.addons.ui.FlxUITabMenu;
 import flixel.addons.ui.FlxUINumericStepper;
@@ -9,10 +15,57 @@ import flixel.addons.ui.FlxInputText;
 import flixel.text.FlxText;
 import flixel.ui.FlxButton;
 
+private inline final textBgColor = 0xFF383A46;
+private inline function setupInputText(fit:FlxInputText) {
+	fit.backgroundColor = textBgColor;
+	fit.color = FlxColor.WHITE;
+	fit.caretColor = FlxColor.WHITE;
+}
+
 /** dont sort my shit **/
 class CustomFlxUITabMenu extends FlxUITabMenu {
 	override function sortTabs(a, b):Int
 		return 0;
+}
+
+class CustomFlxInputText extends FlxInputText {
+	public function new(X:Float = 0, Y:Float = 0, Width:Int = 150, ?Text:String, size:Int = 8, TextColor:Int = 0xFF000000,
+		BackgroundColor:Int = 0xFFFFFFFF, EmbeddedFont:Bool = true)
+	{
+		super(X, Y, Width, Text, size, TextColor, BackgroundColor, EmbeddedFont);
+		setupInputText(this);
+		FlxG.stage.removeEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
+		FlxG.stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown, 100); // higher priority than flixel
+	}
+
+	override function onKeyDown(e) {
+		super.onKeyDown(e);
+		if (hasFocus) e.stopImmediatePropagation();
+	}
+
+	override function destroy() {
+		super.destroy();
+	}
+}
+
+class CustomFlxUIInputText extends FlxUIInputText {
+	public function new(X:Float = 0, Y:Float = 0, Width:Int = 150, ?Text:String, size:Int = 8, TextColor:Int = 0xFF000000,
+		BackgroundColor:Int = 0xFFFFFFFF, EmbeddedFont:Bool = true)
+	{
+		super(X, Y, Width, Text, size, TextColor, BackgroundColor, EmbeddedFont);
+		setupInputText(this);
+		FlxG.stage.removeEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
+		FlxG.stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown, 100); // higher priority than flixel
+	}
+
+	override function onKeyDown(e) {
+		super.onKeyDown(e);
+		if (hasFocus) e.stopImmediatePropagation();
+	}
+
+	override function destroy() {
+		super.destroy();
+	}
 }
 
 /**
@@ -22,10 +75,22 @@ class CustomFlxUITabMenu extends FlxUITabMenu {
 class CustomFlxUINumericStepper extends FlxUINumericStepper {
 	public var hoveringText:Bool = false;
 
+	public var callback:(value:Float, action:String) -> Void;
+
 	public function new(X:Float = 0, Y:Float = 0, StepSize:Float = 1, DefaultValue:Float = 0, Min:Float = -999, Max:Float = 999, Decimals:Int = 0,
 			Stack:Int = FlxUINumericStepper.STACK_HORIZONTAL, ?TextField:FlxText, ?ButtonPlus:FlxUITypedButton<FlxSprite>, ?ButtonMinus:FlxUITypedButton<FlxSprite>,
 			IsPercent:Bool = false) {
+
+		TextField ??= new CustomFlxUIInputText(0, 0, 25);
+
 		super(X, Y, StepSize, DefaultValue, Min, Max, Decimals, Stack, TextField, ButtonPlus, ButtonMinus, IsPercent);
+
+		if (TextField == null) // && text_field is FlxInputText
+			setupInputText(cast text_field);
+		if (ButtonPlus == null)
+			button_plus.label.color = FlxColor.WHITE;
+		if (ButtonMinus == null)
+			button_minus.label.color = FlxColor.WHITE;
 
 		if ((text_field is FlxUIInputText))
 		{
@@ -54,12 +119,24 @@ class CustomFlxUINumericStepper extends FlxUINumericStepper {
 		_doCallback(FlxUINumericStepper.EDIT_EVENT);
 		_doCallback(FlxUINumericStepper.CHANGE_EVENT);
 	}
+
+	override function _doCallback(event_name:String) {
+		if (callback != null) callback(value, event_name);
+		return super._doCallback(event_name);
+	}
 }
 
 /**
 	Allow quick mouse wheel option scrolling without having to open the dropdown
 **/
-class CustomFlxUIDropDownMenu extends flixel.addons.ui.FlxUIDropDownMenu.FlxUIDropDownMenu {
+class CustomFlxUIDropDownMenu extends FlxUIDropDownMenu {
+	public function new(X:Float = 0, Y:Float = 0, DataList:Array<StrNameLabel>, ?Callback:String->Void, ?Header:FlxUIDropDownHeader,
+			?DropPanel:FlxUI9SliceSprite, ?ButtonList:Array<FlxUIButton>, ?UIControlCallback:Bool->FlxUIDropDownMenu->Void) {
+		super(X, Y, DataList, Callback, Header, DropPanel, ButtonList, UIControlCallback);
+		header.background.color = textBgColor;
+		header.text.color = FlxColor.WHITE;
+	}
+
 	override function checkClickOff() {
 		if (!dropPanel.visible && header.button.status == FlxButton.HIGHLIGHT)
 		{

@@ -1,5 +1,6 @@
 package funkin.objects.hud;
 
+import funkin.states.editors.ChartingState;
 import flixel.graphics.frames.FlxFrame;
 import flixel.graphics.FlxGraphic;
 import flixel.FlxSprite;
@@ -19,7 +20,7 @@ using StringTools;
 	// Maybe the prefix constants should be in the health icon instead???
 	
 	override function changeIcon(char:String){
-		frames = Paths.getSparrowAtlas('icons/$char');
+		frames = Paths.sparrowAtlas('icons/$char');
 		animation.addByPrefix("idle", IDLE_PREFIX, 24);
 		animation.addByPrefix("losing", LOSING_PREFIX, 24);
 		final animFrames:Array<FlxFrame> = new Array<FlxFrame>();
@@ -102,34 +103,41 @@ class HealthIcon extends FlxSprite
 	public function swapOldIcon() 
 	{
 		if (!isOldIcon){
-			var oldIcon = Paths.image('icons/$char-old');
+			var allowGPU:Bool = !(FlxG.state is ChartingState);
+
+			var graphic = Paths.image('icons/$char-old', null, allowGPU);
 			
-			if(oldIcon == null)
-				oldIcon = Paths.image('icons/icon-$char-old'); // base game compat
+			#if ALLOW_DEPRECATION
+			// psych / base game compat
+			graphic ??= Paths.image('icons/icon-$char-old', null, allowGPU);
+			#end
 
-			if (oldIcon != null){
-				changeIconGraphic(oldIcon);
+			if (graphic != null) {
+				changeIconGraphic(graphic);
 				isOldIcon = true;
-				return;
 			}
+		}else {
+			changeIcon(char);
+			isOldIcon = false;
 		}
-
-		changeIcon(char);
-		isOldIcon = false;
 	}
 
 	public function changeIcon(char:String) {
-		var file:Null<FlxGraphic> = Paths.image('icons/$char'); 
+		var allowGPU:Bool = !(FlxG.state is ChartingState);
 
-		if(file == null)
-			file = Paths.image('icons/icon-$char'); // base game compat
-		
-		if(file == null) 
-			file = Paths.image('icons/face'); // Prevents crash from missing icon
+		var graphic:Null<FlxGraphic> = Paths.image('icons/$char', null, allowGPU); 
 
-		if (file != null){
+		#if ALLOW_DEPRECATION
+		// psych / base game compat
+		graphic ??= Paths.image('icons/icon-$char', null, allowGPU);
+		#end
+
+		// Prevents crash from missing icon
+		graphic ??= Paths.image('icons/face', null, allowGPU);
+
+		if (graphic != null){
 			//// TODO: sparrow atlas icons? would make the implementation of extra behaviour (ex: winning icons) way easier
-			changeIconGraphic(file);
+			changeIconGraphic(graphic);
 			this.char = char;
 		}
 
@@ -137,11 +145,6 @@ class HealthIcon extends FlxSprite
 			antialiasing = false;
 			useDefaultAntialiasing = false;
 		}
-	}
-
-	override function updateHitbox()
-	{
-		super.updateHitbox();
 	}
 
 	public function getCharacter():String {
