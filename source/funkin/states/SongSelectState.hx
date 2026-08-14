@@ -84,29 +84,6 @@ class SongSelectState extends funkin.states.base.DebugListState
 
 	override public function update(e)
 	{
-		var speed = 1;
-		
-		if (FlxG.mouse.wheel != 0)
-			curSelected -= FlxG.mouse.wheel;
-
-		if (controls.UI_UP || controls.UI_DOWN){
-			if (controls.UI_DOWN_P){
-				curSelected += speed;
-				ySecsHolding = 0;
-			}
-			if (controls.UI_UP_P){
-				curSelected -= speed;
-				ySecsHolding = 0;
-			}
-
-			var checkLastHold:Int = Math.floor((ySecsHolding - 0.5) * 10);
-			ySecsHolding += e;
-			var checkNewHold:Int = Math.floor((ySecsHolding - 0.5) * 10);
-
-			if(ySecsHolding > 0.35 && checkNewHold - checkLastHold > 0)
-				curSelected += (checkNewHold - checkLastHold) * (controls.UI_UP ? -1 : 1) * speed;
-		}
-
 		if (FlxG.keys.pressed.CONTROL)
 		{
 			var ss = new GameplayChangersSubstate();
