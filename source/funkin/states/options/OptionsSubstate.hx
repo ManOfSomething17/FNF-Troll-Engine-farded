@@ -65,6 +65,7 @@ class OptionsSubstate extends MusicBeatSubstate
 					"ghostTapping", 
 					"directionalCam", 
 					"noteOffset", 
+					"visualOffset", 
 					"ratingOffset",
 				]
 			],
@@ -73,6 +74,7 @@ class OptionsSubstate extends MusicBeatSubstate
 				[
 					"masterVolume",
 					"songVolume",
+					"pauseVolume",
 					'sfxVolume',
 					"missVolume",
 					"hitsoundVolume", 
@@ -508,13 +510,17 @@ class OptionsSubstate extends MusicBeatSubstate
 					lastFlixelVolume = snappedVol;
 					FlxG.sound.showSoundTray(snappedVol > prevVol);
 				}
-
 			case 'sfxVolume':
 				playPreviewSound("scrollMenu", newVal * 0.01);
 			case 'missVolume':
 				playPreviewSound('missnote${1+Std.random(3)}', newVal * 0.01);
 			case 'hitsoundVolume':
 				playPreviewSound("hitsound", newVal * 0.01);
+			case 'pauseVolume':
+				if (PauseSubState.instance != null){
+					PauseSubState.instance.pauseMusic.fadeTween.cancel();
+					PauseSubState.instance.pauseMusic.volume = newVal * 0.01;
+				}
 		}
 	}
 
@@ -803,7 +809,7 @@ class OptionsSubstate extends MusicBeatSubstate
 				var checkbox = new Checkbox();
 				checkbox.toggled = data.value;
 
-				var label = new FlxText(0, 0, 0, "off", 16);
+				var label = new FlxText(0, 0, 0, "", 16);
 				label.applyFormat(TextFormats.OPT_VALUE_TEXT);
 
 				widget.data.set("checkbox", checkbox);
@@ -1028,7 +1034,7 @@ class OptionsSubstate extends MusicBeatSubstate
 					}
 				}
 
-				text.text = checkbox.toggled ? "On" : "Off";
+				text.text = Paths.getString('opt_value_bool_${checkbox.toggled}') ?? Std.string(checkbox.toggled);
 
 			case Dropdown:
 				var arrow:FlxSprite = widget.data.get("arrow");

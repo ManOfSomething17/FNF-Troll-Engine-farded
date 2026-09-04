@@ -717,6 +717,9 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 			selectTrack(lastSelectedTrack);
 		else
 			waveformTrackDropDown.selectedId = "None";
+
+		utRay.resize(0);
+		new NonAction("Open Chart");
 	}
 
 	private function onLoadMetadata() {
@@ -1198,6 +1201,30 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 		// the user can't copy to a section that isn't the current one but why not check anyway
 		if (Math.abs(curSection - destIdx) <= 1)
 			doUpdateGridObjects = true;
+	}
+
+	function snapSelectedNotes() {
+		if (selectedNotes.length == 0)
+			return;
+
+		var actions:Array<ChartingAction> = [for (note in selectedNotes) {
+			var ogTime:Float = note.strumTime;
+			new DynamicAction(
+				function() {
+					note.strumTime = snapTime(ogTime, Conductor.stepCrochet * quantizationMult);
+				},
+				function() {
+					note.strumTime = ogTime;
+				},
+				"Snap Note Position"
+			);
+		}];
+
+		//// TODO: start caching note objects instead of constantly recreating them when switching sections/doing changes :/
+		var f = () -> doUpdateGridObjects = true;
+		actions.push(new DynamicAction(f, f));
+
+		new GroupAction('Snap Note Positions', actions);
 	}
 
 	function swapNoteSides(notes:Array<ChartObject>) {
@@ -2456,9 +2483,8 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 
 	inline function sectionStartTime(add:Int = 0):Float
 		return getSectionStartTime(curSection + add);
-
-	function getSnappedTime(snap:Float) {
-		var time = Conductor.songPosition;
+	
+	function snapTime(time:Float, snap:Float) {
 		var bmpEventTime = Conductor.getBPMFromSeconds(time).songTime;
 		return CoolMath.snap(time - bmpEventTime, snap) + bmpEventTime;
 	}
@@ -2724,9 +2750,7 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 				saveChartFile();
 			}
 			if (FlxG.keys.justPressed.Q) {
-				// hudskins broke this
-				useQuantNotes = !useQuantNotes;
-				doUpdateGridObjects = true;
+				snapSelectedNotes();
 			}
 			if (FlxG.keys.justPressed.O) {
 				openSongSelect();
@@ -2876,7 +2900,7 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 			pauseTracks();
 
 			var snap:Float = Conductor.stepCrochet * quantizationMult;
-			var feces:Float = getSnappedTime(snap) + (FlxG.keys.justPressed.UP ? -snap : snap);
+			var feces:Float = snapTime(Conductor.songPosition, snap) + (FlxG.keys.justPressed.UP ? -snap : snap);
 
 			FlxTween.tween(Conductor, {songPosition: feces}, 0.1, {ease: FlxEase.circOut});
 		}
@@ -3162,7 +3186,7 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 		if (checkCanMouseScroll() && FlxG.mouse.wheel != 0) {
 			var snap = Conductor.stepCrochet;
 			if (options.mouseScrollingQuant) snap *= quantizationMult;
-			Conductor.songPosition = getSnappedTime(snap) - (snap * FlxG.mouse.wheel);
+			Conductor.songPosition = snapTime(Conductor.songPosition, snap) - (snap * FlxG.mouse.wheel);
 
 			pauseTracks();
 		}
@@ -3815,8 +3839,6 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 		}
 	}
 
-	var useQuantNotes:Bool = ClientPrefs.noteSkin == 'Quants';
-
 	function setupNoteData(i:NoteData, sectionNumber:Int):Note {
 		var daField:Int = Math.floor(i.column / _song.keyCount);
 		var note:Note = new Note(i.strumTime, i.column % _song.keyCount, null, daField, (i.sustainLength <= 0 ? TAP : HEAD), true, hudSkin);
@@ -3824,7 +3846,6 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 		note.realColumn = i.column;
 		note.mustPress = i.column < _song.keyCount;
 		note.sustainLength = i.sustainLength;
-		note.canQuant = useQuantNotes;
 		initNoteType(i.noteType);
 		note.noteType = i.noteType;
 
@@ -4050,7 +4071,7 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 
 	function undo()
 	{
-		if (utIdx < 0) return;
+		if (utIdx <= 0) return;
 		var action = utRay[utIdx];
 		if (action == null) return;
 		action.undo();
@@ -4538,7 +4559,7 @@ private class HistoryDisplay extends FlxSpriteGroup {
 	}
 
 	override function update(elapsed:Float) {
-		var scrollChange:Int = FlxG.mouse.overlaps(this) ? -FlxG.mouse.wheel : 0;
+		var scrollChange:Int = FlxG.mouse.overlaps(this) ? FlxG.mouse.wheel : 0;
 
 		if (FlxG.keys.justPressed.V)
 			scrollChange--;
@@ -5135,6 +5156,20 @@ private class GroupAction extends ChartingAction {
 
 	public function toString()
 		return name;
+}
+
+private class NonAction extends ChartingAction {
+	var description:String;
+	
+	public function new(description:String) {
+		this.description = description;
+		super();
+	}
+
+	public function undo() {}
+	public function redo() {}
+	public function toString()
+		return description;
 }
 
 private abstract class ChartingAction

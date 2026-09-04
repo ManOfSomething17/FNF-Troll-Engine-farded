@@ -126,6 +126,19 @@ class ClientPrefs {
 					"options" => ["J1", "J2", "J3", "J4", "J5", "J6", "J7", "J8", "JUSTICE"]
 				]
 			},
+			"visualOffset" => {
+				display: "Visual Offset",
+				desc: "How much to visually delay notes, in milliseconds.",
+				type: Number,
+				value: 0,
+				data: [
+					"requiresRestart" => false,
+					"min" => -1000,
+					"max" => 1000,
+					"step" => 1,
+					"suffix" => "ms"
+				]
+			},
 			"noteOffset" => {
 				display: "Offset",
 				desc: "How much to offset notes, song events, etc.",
@@ -190,6 +203,19 @@ class ClientPrefs {
 				desc: "The volume of music.",
 				type: Number,
 				value: 1,
+				data: [
+					"suffix" => "%",
+					"min" => 0,
+					"max" => 100,
+					"step" => 1,
+					"type" => "percent" // saved value is value / 100
+				]
+			},
+			"pauseVolume" => {
+				display: "Pause Volume",
+				desc: "The volume of pause menu music",
+				type: Number,
+				value: 0.75,
 				data: [
 					"suffix" => "%",
 					"min" => 0,

@@ -24,7 +24,7 @@ using StringTools;
 
 final class Version
 {
-	public static final engineVersion:String = '0.3.1'; // Used for autoupdating n stuff
+	public static final engineVersion:String = '0.3.2'; // Used for autoupdating n stuff
 	public static final betaVersion:String = '0'; // beta version, set it to 0 if not on a beta version, otherwise do it based on semantic versioning (alpha.1, beta.1, rc.1, etc)
 	public static final isBeta:Bool = betaVersion != '0';
 
@@ -53,7 +53,7 @@ class Main extends Sprite
 	var initialState:Class<FlxState> = StartupState; // The FlxState the game starts with.
 	var nextState:Class<FlxState> = funkin.states.TitleState; 
 	var framerate:Int = 60; // How many frames per second the game should run at.
-	var skipSplash:Bool = true; // Whether to skip the flixel splash screen that appears in release mode.
+	var skipSplash:Bool = Std.random(1000) != 1; // Whether to skip the flixel splash screen that appears in release mode.
 	var startFullscreen:Null<Bool> = null; // Whether to start the game in fullscreen on desktop targets
 
 	public static final UserAgent:String = 'TrollEngine/${Version.engineVersion}'; // used for http requests. if you end up forking the engine and making your own then make sure to change this!!
