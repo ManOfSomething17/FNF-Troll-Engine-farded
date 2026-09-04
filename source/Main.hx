@@ -53,7 +53,7 @@ class Main extends Sprite
 	var initialState:Class<FlxState> = StartupState; // The FlxState the game starts with.
 	var nextState:Class<FlxState> = funkin.states.TitleState; 
 	var framerate:Int = 60; // How many frames per second the game should run at.
-	var skipSplash:Bool = true; // Whether to skip the flixel splash screen that appears in release mode.
+	var skipSplash:Bool = Std.random(1000) != 1; // Whether to skip the flixel splash screen that appears in release mode.
 	var startFullscreen:Null<Bool> = null; // Whether to start the game in fullscreen on desktop targets
 
 	public static final UserAgent:String = 'TrollEngine/${Version.engineVersion}'; // used for http requests. if you end up forking the engine and making your own then make sure to change this!!
@@ -235,6 +235,9 @@ class Main extends Sprite
 
 	public static inline function printCallStack()
 		print(CrashHandler.callstackToString(haxe.CallStack.callStack()));
+
+	public static inline function printExceptionStack()
+		print(CrashHandler.callstackToString(haxe.CallStack.exceptionStack()));
 
 	public static inline function showCallStack(...extraInfo:Any) {
 		var css = CrashHandler.callstackToString(haxe.CallStack.callStack());

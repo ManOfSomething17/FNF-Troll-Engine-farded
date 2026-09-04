@@ -2,7 +2,6 @@ package funkin.states;
 
 import math.CoolMath;
 import funkin.data.Highscore;
-import funkin.data.Song;
 import funkin.data.Level;
 import flixel.util.FlxSignal;
 import flixel.system.FlxAssets.FlxGraphicAsset;
@@ -219,11 +218,11 @@ class StoryModeState extends MusicBeatState {
 		var levelDir = Paths.getFolderPath(folder) + 'levels/';
 
 		var contentLevelPaths:Array<String> = [];
-		Paths.iterateDirectory(levelDir, function(file:String){
+		for (file in Paths.readDirectory(levelDir)) {
 			var name = Path.withoutExtension(levelDir + file);
 			if(!contentLevelPaths.contains(name))
 				contentLevelPaths.push(name);
-		});
+		}
 
 		var contentLevels:Array<Level> = [];
 		for (filePath in contentLevelPaths) {

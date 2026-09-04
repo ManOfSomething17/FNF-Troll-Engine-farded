@@ -4,6 +4,7 @@ import funkin.data.StageData;
 import funkin.data.CharacterData;
 import haxe.Json;
 import haxe.io.Path;
+import funkin.util.FileUtil;
 
 using StringTools;
 
@@ -24,8 +25,8 @@ class VSliceConverter extends MusicBeatState
 		var added:Array<String> = [];
 		menu.addTextOption("Stages");
 		for (folderPath in Paths.getFolders("stages")) {
-			Paths.iterateDirectory(folderPath, (file:String)->{
-				if (added.contains(file))return;
+			for (file in Paths.readDirectory(folderPath)) {
+				if (added.contains(file))continue;
 
 				added.push(file);
 				if(file.endsWith("json")){
@@ -33,20 +34,20 @@ class VSliceConverter extends MusicBeatState
 					if(Reflect.field(data, "version") != null){
 						menu.addTextOption(Path.withoutDirectory(Path.withoutExtension(file)), {
 							onAccept: (i:Int, a:Alphabet) -> {
-								CoolUtil.showSaveDialog(Json.stringify(StageData.convertVSlice(cast data), "\t"), "Save Stage Data", file, ["JSON file", "*.json"], onSaveComplete, onSaveCancel);
+								FileUtil.showSaveDialog(Json.stringify(StageData.convertVSlice(cast data), "\t"), "Save Stage Data", file, ["JSON file", "*.json"], onSaveComplete, onSaveCancel);
 							}
 						});
 					}
 				}
 				//menu.addTextOption();
-			});
+			}
 		}
 
 		menu.addTextOption("Characters");
 		for (folderPath in Paths.getFolders("characters")) {
-			Paths.iterateDirectory(folderPath, (file:String) -> {
+			for (file in Paths.readDirectory(folderPath)) {
 				if (added.contains(file))
-					return;
+					continue;
 				added.push(file);
 				if (file.endsWith("json")) {
 					var data:Dynamic = Paths.json('characters/$file');
@@ -56,13 +57,13 @@ class VSliceConverter extends MusicBeatState
 							onAccept: (i:Int, a:Alphabet) -> {
 								var charFile:CharacterFile = CharacterData.getCharacterFile(id);
 								trace(charFile);
-								CoolUtil.showSaveDialog(Json.stringify(charFile, "\t"), "Save Character Data", file, ["JSON file", "*.json"], onCharSaveComplete, onSaveCancel);
+								FileUtil.showSaveDialog(Json.stringify(charFile, "\t"), "Save Character Data", file, ["JSON file", "*.json"], onCharSaveComplete, onSaveCancel);
 							}
 						});
 					}
 				}
 				// menu.addTextOption();
-			});
+			}
 		}
 
 		var bg = new funkin.objects.CoolMenuBG(Paths.image('menuDesat', null, false), 0xfffffb00);
@@ -90,7 +91,7 @@ class VSliceConverter extends MusicBeatState
 
 	function onCharSaveComplete(f:String): Void {
 		trace(f);
-		CoolUtil.showSaveDialog("
+		FileUtil.showSaveDialog("
 		function setupCharacter(){
 			super();
 			this.positionArray[0] -= this.width / 2;

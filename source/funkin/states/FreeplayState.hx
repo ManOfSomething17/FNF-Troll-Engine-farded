@@ -109,12 +109,11 @@ class FreeplayState extends MusicBeatState
 			if (metadata.defaultCategory != null && metadata.defaultCategory.length > 0){
 				var dir = Paths.mods(contentId + "/songs");
 
-				Paths.iterateDirectory(dir, function(file:String) {
+				for (file in Paths.readDirectory(dir)) {
 					if (FileSystem.isDirectory(haxe.io.Path.join([dir, file]))) {
 						sowy(file);
 					}
-					
-				});
+				}
 
 			}
 		}
@@ -286,9 +285,12 @@ class FreeplayState extends MusicBeatState
 			PlayState.loadPlaylist([selectedSongData], curChartId);
 			
 			if (PlayState.SONG != null){
-				Conductor.changeBPM(PlayState.SONG.bpm);
 				var instAsset = selectedSongData.getTrackSound(PlayState.SONG.tracks.inst[0]);
 				FlxG.sound.playMusic(instAsset, 0.6);
+				Conductor.tracks = [];
+				Conductor.startSong();
+				Conductor.changeBPM(PlayState.SONG.bpm);
+				Conductor.tracks.push(FlxG.sound.music);
 			}
 		}
 	}
@@ -313,8 +315,6 @@ class FreeplayState extends MusicBeatState
 			shouldRestoreControl = false;
 			menu.controls = controls;
 		}
-
-		hintBG.exists = hintText.exists = menu.controls != null;
 
 		if (menu.controls == null)
 			return;
@@ -452,6 +452,8 @@ class FreeplayState extends MusicBeatState
 
 		scoreText.text = 'PERSONAL BEST • $score • ($rating%)' + fcDisplay;
 		positionHighscore();
+
+		hintBG.exists = hintText.exists = (menu.controls != null) && (persistentUpdate || this.subState == null);
 
 		super.draw();
 	}

@@ -85,6 +85,8 @@ class Paths
 	public static var graphicDumpExclusions:Array<FlxGraphic> = [];
 	public static var soundDumpExclusions:Array<Sound> = [];
 
+	public static var whitePixel:flixel.graphics.frames.FlxFrame;
+
 	public static function excludeAsset(key:String)
 	{
 		if (!dumpExclusions.contains(key))
@@ -92,6 +94,15 @@ class Paths
 	}
 
 	public static function init() {
+		{ //ACTUAL white pixel, instead of 10x10 white pixels fuck flixel piece of shit good for nothing
+			var bd = new BitmapData(1, 1, true, 0xFFFFFFFF);
+			var graphic:FlxGraphic = FlxG.bitmap.add(bd, true, "whitePixel");
+			graphic.persist = true;
+			whitePixel = graphic.imageFrame.frame;
+			graphicDumpExclusions.push(graphic);
+		}
+		graphicDumpExclusions.push(FlxG.bitmap.whitePixel.parent);
+
 		#if READ_EMBEDDED_ASSETS
 		AltFilePaths.initPaths();
 		#end
@@ -400,22 +411,31 @@ class Paths
 		return parsed;
 	}
 
-	inline static public function sparrowAtlas(key:String, ?library:String):FlxAtlasFrames
+	inline static public function sparrowAtlas(key:String, ?library:String, allowGPU:Bool = true):FlxAtlasFrames
 	{
 		var rawXml = Paths.getContent(getPath('images/$key.xml'));
 		return rawXml == null ? null : FlxAtlasFrames.fromSparrow(
-			image(key, library),
+			image(key, library, allowGPU),
 			Xml.parse(rawXml)
 		);
 	}
 
-	inline static public function packerAtlas(key:String, ?library:String):FlxAtlasFrames
+	inline static public function packerAtlas(key:String, ?library:String, allowGPU:Bool = true):FlxAtlasFrames
 	{
-		var txtPath:String = getPath('images/$key.txt');
-		return FlxAtlasFrames.fromSpriteSheetPacker(
-			image(key, library),
-			exists(txtPath) ? getContent(txtPath) : txtPath
+		var rawTxt:String = Paths.getContent(getPath('images/$key.txt'));
+		return rawTxt == null ? null : FlxAtlasFrames.fromSpriteSheetPacker(
+			image(key, library, allowGPU),
+			rawTxt
 		);
+	}
+
+	inline static public function asepriteAtlas(key:String, ?library:String, ?allowGPU:Bool = true):FlxAtlasFrames
+	{
+		var raw:String = Paths.getContent(getPath('images/$key.json'));
+		return raw == null ? null : FlxAtlasFrames.fromTexturePackerJson(
+			image(key, library, allowGPU),
+			raw
+		);		
 	}
 
 	inline static public function animateAtlas(key:String, ?library:String)
@@ -430,15 +450,21 @@ class Paths
 
 	#if ALLOW_DEPRECATION
 	@:deprecated("getSparrowAtlas is deprecated, use sparrowAtlas instead.")
-	inline static public function getSparrowAtlas(key:String, ?library:String):FlxAtlasFrames
+	inline static public function getSparrowAtlas(key:String, ?library:String, allowGPU:Bool = true):FlxAtlasFrames
 	{
-		return sparrowAtlas(key, library);
+		return sparrowAtlas(key, library, allowGPU);
 	}
 
 	@:deprecated("getPackerAtlas is deprecated, use packerAtlas instead.")
-	inline static public function getPackerAtlas(key:String, ?library:String):FlxAtlasFrames
+	inline static public function getPackerAtlas(key:String, ?library:String, allowGPU:Bool = true):FlxAtlasFrames
 	{
-		return packerAtlas(key, library);
+		return packerAtlas(key, library, allowGPU);
+	}
+
+	@:deprecated("getAsepriteAtlas is deprecated, use asepriteAtlas instead.")
+	inline static public function getAsepriteAtlas(key:String, ?library:String, allowGPU:Bool = true)
+	{
+		return asepriteAtlas(key, library, allowGPU);
 	}
 
 	@:deprecated("getTextureAtlas is deprecated, use animateAtlas instead.")
@@ -467,9 +493,9 @@ class Paths
 		Iterates through a directory and calls a function with the name of each file contained within it
 		Returns true if the directory was a valid folder and false if not.
 	**/
+	@:deprecated('iterateDirectory is deprecated. Use readDirectory instead!')
 	inline static public function iterateDirectory(path:String, func:haxe.Constraints.Function):Bool
 	{
-		// TODO: replace this function with an iterator
 		#if FILESYSTEM_ALLOWED
 		if (FileSystem.exists(path) && FileSystem.isDirectory(path)) {
 			for (name in FileSystem.readDirectory(path))
@@ -483,6 +509,30 @@ class Paths
 		#else
 		return false;
 		#end
+	}
+
+	public static inline function _readDirectory(path:String):Null<Array<String>> {
+		return if (FileSystem.exists(path) && FileSystem.isDirectory(path))
+			FileSystem.readDirectory(path);
+		else
+			null;
+	}
+
+	public static inline function readDirectory(path:String):Array<String> {
+		var ret:Array<String>;
+
+		#if FILESYSTEM_ALLOWED
+		ret = Paths._readDirectory(path);
+		if (ret != null) return ret; 
+		#end
+		
+		#if READ_EMBEDDED_ASSETS
+		ret = AltFilePaths._readDirectory(path);
+		if (ret != null) return ret; 
+		#end
+		
+		ret = [];
+		return ret;
 	}
 
 	inline static public function fileExists(key:String, ?type:AssetType, ?library:String):Bool
@@ -732,7 +782,7 @@ class Paths
 		contentDirectories.clear();
 		contentDirectories.set('', contentFolderName);
 
-		iterateDirectory(contentFolderName, (folderName) -> {
+		for (folderName in readDirectory(contentFolderName)) {
 			var folderPath = '$contentFolderName/$folderName';
 
 			if (isDirectory(folderPath) && !list.contains(folderName))
@@ -748,12 +798,12 @@ class Paths
 					#else
 					contentMetadata.set(folderName, data);
 					#end
-					return;
+					continue;
 				}else {
 					contentMetadata.set(folderName, {});
 				}
 			}
-		});
+		}
 	}
 	
 	inline static function updateContentMetadataStructure(data:Dynamic):ContentMetadata
@@ -953,6 +1003,13 @@ private class AltFilePaths {
 			Func(i);
 		
 		return true;
+	}
+
+	public static inline function _readDirectory(path:String):Null<Array<String>> {
+		if (dirMap.exists(dir))
+			dirMap.get(dir);
+		else	
+			null;
 	}
 	#end
 }
