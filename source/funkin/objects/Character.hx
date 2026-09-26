@@ -3,6 +3,7 @@ package funkin.objects;
 import funkin.scripts.ScriptedClassShit.InstanceInterp;
 import flixel.graphics.frames.FlxAtlasFrames;
 import funkin.states.PlayState;
+import funkin.scripts.FunkinScript.ScriptType;
 import funkin.objects.playfields.PlayField;
 import funkin.objects.notes.Note;
 import funkin.data.CharacterData;
@@ -357,7 +358,7 @@ class Character extends FlxSprite
 	public function setupCharacter()
 	{
 		var characterScript = characterScripts[0];
-		if (characterScript != null) {
+		if (characterScript != null && characterScript.scriptType == HSCRIPT) {
 			var characterScript:FunkinHScript = cast characterScript;
 			if (characterScript.exists('setupCharacter')) {
 				characterScript.executeFunc('setupCharacter', null, this, ["super" => _setupCharacter]);
@@ -719,16 +720,20 @@ class Character extends FlxSprite
 
 	public function startScript(script:FunkinScript){		
 		#if HSCRIPT_ALLOWED
-		script.call("onLoad", [this]);
+		if(script.scriptType == ScriptType.HSCRIPT){
+			callScript(script, "onLoad", [this]);
+		}
 		#end
 	}
 
 	public function stopScript(script:FunkinScript, destroy:Bool=false){
 		#if HSCRIPT_ALLOWED
-		script.call("onStop", [this]);
-		if(destroy){
-			script.call("onDestroy");
-			script.stop();
+		if (script.scriptType == ScriptType.HSCRIPT){
+			callScript(script, "onStop", [this]);
+			if(destroy){
+				script.call("onDestroy");
+				script.stop();
+			}
 		}
 		#end
 	}
@@ -767,26 +772,78 @@ class Character extends FlxSprite
 		return this;
 	}
 
-	public function callOnScripts(funcName:String, ?args:Array<Dynamic>):Dynamic
+	public function callOnScripts(event:String, ?args:Array<Dynamic>, ignoreStops:Bool = false, ?exclusions:Array<String>, ?scriptArray:Array<Dynamic>, ?vars:Map<String, Dynamic>, ?ignoreSpecialShit:Bool = true):Dynamic
 	{
-		return Globals.callOnScripts(characterScripts, funcName, args);
+		#if (HSCRIPT_ALLOWED)
+		if (args == null)
+			args = [];
+		if (exclusions == null)
+			exclusions = [];
+		if (scriptArray == null)
+			scriptArray = characterScripts;
+
+		var returnVal:Dynamic = Globals.Function_Continue;
+
+		for (script in scriptArray)
+		{
+			if (exclusions.contains(script.scriptName))
+				continue;
+			
+			var ret:Dynamic = script.call(event, args, vars);
+			if (ret == Globals.Function_Halt)
+			{
+				ret = returnVal;
+				if (!ignoreStops)
+					return returnVal;
+			};
+			if (ret != Globals.Function_Continue && ret != null)
+				returnVal = ret;
+		}
+
+		if (returnVal == null)
+			returnVal = Globals.Function_Continue;
+
+		return returnVal;
+		#else
+		return Globals.Function_Continue;
+		#end
 	}
 
-	public function setOnScripts(variable:String, value:Dynamic)
+	public function setOnScripts(variable:String, value:Dynamic, ?scriptArray:Array<Dynamic>)
 	{
-		for (script in characterScripts) {
+		if (scriptArray == null)
+			scriptArray = characterScripts;
+
+		for (script in scriptArray) {
 			script.set(variable, value);
 			// trace('set $variable, $value, on ${script.scriptName}');
 		}
 	}
 
-	public function callScript(scriptName:String, funcName:String, ?args:Array<Dynamic>):Dynamic
+	public function callScript(script:Dynamic, event:String, ?args:Array<Dynamic>):Dynamic
 	{
 		#if (HSCRIPT_ALLOWED) // no point in calling this code if you.. for whatever reason, disabled scripting.
-		var scripts:Array<FunkinScript> = characterScripts.filter(script -> script.scriptName == scriptName);
-		return Globals.callOnScripts(scripts, funcName, args);
-		#else
-		return Globals.Function_Continue;
+		if ((script is FunkinScript))
+		{
+			return callOnScripts(event, args, true, [], [script], [], false);
+		}
+		else if ((script is Array))
+		{
+			return callOnScripts(event, args, true, [], script, [], false);
+		}
+		else if ((script is String))
+		{
+			var scripts:Array<FunkinScript> = [];
+
+			for (scr in characterScripts)
+			{
+				if (scr.scriptName == script)
+					scripts.push(scr);
+			}
+
+			return callOnScripts(event, args, true, [], scripts, [], false);
+		}
 		#end
+		return Globals.Function_Continue;
 	}
 }

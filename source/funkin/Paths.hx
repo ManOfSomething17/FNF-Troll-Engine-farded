@@ -3,8 +3,6 @@ package funkin;
 import haxe.io.Bytes;
 import openfl.utils.ByteArray;
 import haxe.ds.StringMap;
-import funkin.data.content.Pack;
-import funkin.data.content.PackManager;
 import funkin.data.LocalizationMap;
 import flixel.addons.display.FlxRuntimeShader;
 import flixel.graphics.frames.FlxAtlasFrames;
@@ -23,15 +21,12 @@ import sys.FileSystem;
 import sys.io.File;
 #end
 
-//// idgaf about asset libraries
+//// idgaf about libraries
 @:access(openfl.display.BitmapData)
 class Paths
 {
-	inline public static final ASSETS_PATH:String = 'assets';
-	inline public static final CONTENT_PATH:String = 'content';
-
-	inline public static final IMAGE_EXT = "png";
-	inline public static final SOUND_EXT = "ogg";
+	inline public static var IMAGE_EXT = "png";
+	inline public static var SOUND_EXT = "ogg";
 
 	public static final HSCRIPT_EXTENSIONS:Array<String> = ["hscript", "hxs",];
 	public static final SCRIPT_EXTENSIONS:Array<String> = [
@@ -39,22 +34,64 @@ class Paths
 		"hxs",
 	];
 
+
+	public static function getFileWithExtensions(scriptPath:String, extensions:Array<String>):Null<String> {
+		for (fileExt in extensions) {
+			var fullPath = getPath('$scriptPath.$fileExt');
+			if (fullPath != null)
+				return fullPath;
+		}
+
+		return null;
+	}
+
+	public static function isHScript(file:String){
+		for(ext in Paths.HSCRIPT_EXTENSIONS)
+			if(file.endsWith('.$ext'))
+				return true;
+		
+		return false;
+	}
+	public inline static function getHScriptPath(scriptPath:String):Null<String>
+	{
+		#if HSCRIPT_ALLOWED
+		return getFileWithExtensions(scriptPath, Paths.HSCRIPT_EXTENSIONS);
+		#else
+		return null;
+		#end
+	}
+
+	public inline static function hscript(key:String):Null<String> {
+		#if HSCRIPT_ALLOWED
+		return getFileWithExtensions(key, Paths.HSCRIPT_EXTENSIONS);
+		#else
+		return null;
+		#end
+	}
+
 	public static var localTrackedAssets:Array<String> = [];
 	public static var currentTrackedAssets:Map<String, FlxGraphic> = [];
 	public static var currentTrackedSounds:Map<String, Sound> = [];
 
 	public static var dumpExclusions:Array<String> = [
-		'$ASSETS_PATH/music/freakyIntro.$SOUND_EXT',
-		'$ASSETS_PATH/music/freakyMenu.$SOUND_EXT',
-		'$ASSETS_PATH/music/breakfast.$SOUND_EXT',
-		'$CONTENT_PATH/global/music/freakyIntro.$SOUND_EXT',
-		'$CONTENT_PATH/global/music/freakyMenu.$SOUND_EXT',
-		'$CONTENT_PATH/global/music/breakfast.$SOUND_EXT',
+		'assets/music/freakyIntro.$SOUND_EXT',
+		'assets/music/freakyMenu.$SOUND_EXT',
+		'assets/music/breakfast.$SOUND_EXT',
+		'$contentFolderName/global/music/freakyIntro.$SOUND_EXT',
+		'$contentFolderName/global/music/freakyMenu.$SOUND_EXT',
+		'$contentFolderName/global/music/breakfast.$SOUND_EXT',
+		'assets/images/Garlic-Bread-PNG-Images.$IMAGE_EXT'
 	];
 	public static var graphicDumpExclusions:Array<FlxGraphic> = [];
 	public static var soundDumpExclusions:Array<Sound> = [];
 
 	public static var whitePixel:flixel.graphics.frames.FlxFrame;
+
+	public static function excludeAsset(key:String)
+	{
+		if (!dumpExclusions.contains(key))
+			dumpExclusions.push(key);
+	}
 
 	public static function init() {
 		{ //ACTUAL white pixel, instead of 10x10 white pixels fuck flixel piece of shit good for nothing
@@ -70,14 +107,10 @@ class Paths
 		AltFilePaths.initPaths();
 		#end
 
-		PackManager.reloadPackList();
-		PackManager.refreshReadList();
-	}
-
-	public static function excludeAsset(path:String)
-	{
-		if (!dumpExclusions.contains(path))
-			dumpExclusions.push(path);
+		#if MODS_ALLOWED
+		Paths.pushGlobalContent();
+		Paths.getModDirectories();
+		#end
 	}
 
 	/// haya I love you for the base cache dump I took to the max
@@ -120,7 +153,8 @@ class Paths
 	inline static function destroyGraphic(graphic:FlxGraphic)
 	{
 		// free some gpu memory
-		graphic?.bitmap?.__texture?.dispose();
+		if (graphic != null && graphic.bitmap != null && graphic.bitmap.__texture != null)
+			graphic.bitmap.__texture.dispose();
 		FlxG.bitmap.remove(graphic);
 	}
 
@@ -147,54 +181,26 @@ class Paths
 		localTrackedAssets.resize(0);
 	}
 
-	public static function getPath(key:String, ?packId:String):Null<String>
+	public static function getPath(key:String):Null<String>
 	{
-		if (packId != null) {
-			var pack = PackManager.packMap.get(packId);
-			if (pack != null) {
-				var path = '${pack.path}/$key';
-				if (exists(path))
-					return path;
-				
-				for (packId in pack.dependencies) {
-					// No null check, if the dependency doesn't exist then the main pack shouldn't have been loaded to the list in the first place
-					var pack = PackManager.packMap.get(packId);
-					var path = '${pack.path}/$key';
-					if (exists(path))
-						return path;
-				}
-			}
-			return null;
-		}
+		var path:String;
 
-		for (pack in PackManager.readList) {
-			var path = '${pack.path}/$key';
-			if (exists(path))
-				return path;
-		}
+		#if MODS_ALLOWED
+		path = Paths.modFolders(key);
+		if (Paths.exists(path)) return path;
+		#end
 
-		return null;
+		path = Paths.getPreloadPath(key);
+		return Paths.exists(path) ? path : null;
 	}
 
-	public static inline function getFolderPath(packId:String):String
-		return PackManager.packMap.get(packId).path;
+	@:deprecated("_getPath is deprecated, use getPath instead.")
+	inline public static function _getPath(key:String):Null<String>
+		return getPath(key);
 
-	public static function getFolders(dir:String):Array<String>
-		return [for (pack in PackManager.readList)
-			'${pack.path}/$dir/'
-		];
-
-	public static inline function getPaths(key:String)
-		return new PackPathsIterator(key);
-
-	public static function getFileWithExtensions(scriptPath:String, extensions:Array<String>):Null<String> {
-		for (fileExt in extensions) {
-			var fullPath = getPath('$scriptPath.$fileExt');
-			if (fullPath != null)
-				return fullPath;
-		}
-
-		return null;
+	inline public static function getPreloadPath(file:String = '')
+	{
+		return 'assets/$file';
 	}
 
 	/*
@@ -222,36 +228,19 @@ class Paths
 		return getPath('fonts/$key');
 	}
 
-	public inline static function video(key:String, ext:String = "mp4"):String
+	static public function video(key:String, ext:String = "mp4"):String
 	{
 		return getPath('videos/$key.$ext');
 	}
 
-	public inline static function getShaderFragment(name:String):Null<String>
+	static public function getShaderFragment(name:String):Null<String>
 	{
 		return getPath('shaders/$name.frag');
 	}
 	
-	public inline static function getShaderVertex(name:String):Null<String>
+	static public function getShaderVertex(name:String):Null<String>
 	{
 		return getPath('shaders/$name.vert');
-	}
-
-	public inline static function getHScriptPath(scriptPath:String):Null<String>
-	{
-		#if HSCRIPT_ALLOWED
-		return getFileWithExtensions(scriptPath, Paths.HSCRIPT_EXTENSIONS);
-		#else
-		return null;
-		#end
-	}
-
-	public inline static function hscript(key:String):Null<String> {
-		#if HSCRIPT_ALLOWED
-		return getFileWithExtensions(key, Paths.HSCRIPT_EXTENSIONS);
-		#else
-		return null;
-		#end
 	}
 
 	inline static public function sound(key:String, ?library:String):Null<Sound>
@@ -284,14 +273,6 @@ class Paths
 		return track(song, "Inst");
 	}
 
-	public static function isHScript(file:String){
-		for(ext in Paths.HSCRIPT_EXTENSIONS)
-			if(file.endsWith('.$ext'))
-				return true;
-		
-		return false;
-	}
-		
 	inline static public function withoutEndingSlash(path:String)
 		return path.endsWith("/") ? path.substr(0, -1) : path;
 
@@ -392,12 +373,12 @@ class Paths
 	}
 	static public function getJson(path:String):Null<Dynamic>
 	{
+		var parsed:Null<Dynamic> = null;
 		var raw = Paths.getContent(path);
-		if (raw == null)
-			return null;
 
 		try {
-			return Json.parse(raw);
+			if (raw != null)
+				parsed = Json.parse(raw);
 		}
 		catch(e:haxe.Exception) {
 			var e = e.message;
@@ -427,7 +408,7 @@ class Paths
 			print('$path: $e');
 		}
 
-		return null;
+		return parsed;
 	}
 
 	inline static public function sparrowAtlas(key:String, ?library:String, allowGPU:Bool = true):FlxAtlasFrames
@@ -631,10 +612,15 @@ class Paths
 	inline public static function cacheGraphic(path:String):Null<FlxGraphic>
 		return getGraphic(path, true);
 
-	/** Like Paths.image, but it gets a path from the base folder instead of the images folder **/
-	public static function graphic(key:String, ?pack:String, allowGPU:Bool = true):Null<FlxGraphic>
+	inline public static function imagePath(key:String, ?folder:String):Null<String>
+		return getPath('images/$key.$IMAGE_EXT');
+
+	inline public static function imageExists(key:String):Bool
+		return imagePath(key) != null;
+
+	public static function image(key:String, ?folder:String = null, allowGPU:Bool = true):Null<FlxGraphic>
 	{
-		var path:String = getPath('$key.$IMAGE_EXT', pack);
+		var path:String = imagePath(key, folder);
 
 		var graphic = (path==null) ? null : getGraphic(path, true, allowGPU);
 		if (graphic==null && Main.showDebugTraces)
@@ -642,17 +628,6 @@ class Paths
 
 		return graphic;
 	}
-
-	public static function image(key:String, ?pack:String, allowGPU:Bool = true):Null<FlxGraphic>
-	{
-		return graphic('images/$key', pack, allowGPU);
-	}
-
-	inline public static function imagePath(key:String, ?pack:String):Null<String>
-		return getPath('images/$key.$IMAGE_EXT', pack);
-
-	inline public static function imageExists(key:String):Bool
-		return imagePath(key) != null;
 
 	inline public static function soundPath(path:String, key:String, ?library:String)
 	{
@@ -699,29 +674,211 @@ class Paths
 		return (path == null) ? null : getJson(path);
 	}
 
-	////
-	public static var currentPack(get, set):Pack;
-	public static var currentPackId(get, set):String;
-	public static var packList(get, never):Array<String>;
-	public static var packMap(get, never):Map<String, Pack>;
+	public static inline function getFolderPath(folder:String = ""):String
+		return (folder == "") ? getPreloadPath() : mods(folder) + "/";
 
-	static inline function get_currentPack() return PackManager.currentPack;
-	static inline function set_currentPack(v:Pack) return PackManager.currentPack = v;
-	static inline function get_currentPackId() return PackManager.currentPackId;
-	static inline function set_currentPackId(v:String) return PackManager.currentPackId = v;
-	static inline function get_packList() return PackManager.packList;
-	static inline function get_packMap() return PackManager.packMap;
+	////	
+	public static var currentModDirectory(default, set):String = '';
+	static function set_currentModDirectory(v:String){
+		if (currentModDirectory == v)
+			return currentModDirectory;
+
+		if (!contentMetadata.exists(v))
+			return currentModDirectory = v;
+
+		if (!contentDirectories.exists(v))return currentModDirectory = '';
+		
+		if (contentMetadata.get(v).dependencies != null)
+			dependencies = contentMetadata.get(v).dependencies;
+		else
+			dependencies = [];
+
+		//trace('set to $v with ${dependencies.length} dependencies');
+
+		return currentModDirectory = v;
+	}
+
+	// TODO: Write all of this to be not shit and use just like a generic load order thing
+	public static var globalContent:Array<String> = [];
+	public static var dependencies:Array<String> = [];
+	public static var preLoadContent:Array<String> = [];
+	public static var postLoadContent:Array<String> = [];
+
+	public static var modsList:Array<String> = [];
+	public static var contentDirectories:Map<String, String> = [];
+	public static var contentMetadata:Map<String, ContentMetadata> = [];
+
+	#if MODS_ALLOWED
+	public static final contentFolderName:String = 'content';
+
+	inline static public function mods(key:String = '')
+		return '$contentFolderName/$key';
+
+	inline static public function getGlobalContent(){
+		return globalContent;
+	}
+
+	static public function pushGlobalContent(){
+		globalContent = [];
+
+		for (mod => json in getContentMetadata())
+		{
+			if (Reflect.field(json, "runsGlobally") == true) 
+				globalContent.push(mod);
+		}
+
+		trace('global content: $globalContent');
+
+		return globalContent;
+	}
+
+	static public function _modPath(key:String, mod:String):String {
+		return contentDirectories.get(mod) + '/' + key;
+	}
+
+	static public function modPath(key:String, mod:String):Null<String> {
+		if (contentDirectories.exists(mod)) {
+			var path:String = _modPath(key, mod);
+			if (exists(path)) return path;
+		}
+		return null;
+	}
 	
-	#if ALLOW_DEPRECATION
-	@:deprecated('contentFolderName is deprecated! Use CONTENT_PATH instead.')
-	public static var contentFolderName(get, never):String;
-	static inline function get_contentFolderName() return CONTENT_PATH;
+	static public function modFolders(key:String, ignoreGlobal:Bool = false)
+	{
+		var path:Null<String> = null;
 
-	@:deprecated('currentModDirectory is deprecated! Use currentPackId instead.')
-	public static var currentModDirectory(get, set):String;
-	static inline function get_currentModDirectory() return currentPackId;
-	static inline function set_currentModDirectory(v:String) return currentPackId = v;
+		inline function check(mod:String) {
+			path = modPath(key, mod);
+		}
+
+		if (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0) {
+			check(Paths.currentModDirectory);
+			if (path != null) return path;
+		}
+
+		for (mod in dependencies) {
+			check(mod);
+			if (path != null) return path;
+		}
+
+		if (ignoreGlobal != true) {
+			for (mod in getGlobalContent()) {
+				check(mod);
+				if (path != null) return path;
+			}
+		}
+
+		return mods(key);
+	}
+
+	// I might end up making this just return an array of loaded mods and require you to press a refresh button to reload content lol
+	// mainly for optimization reasons, so its not going through the entire content folder every single time
+	public static function updateContentLists()
+	{
+		var list:Array<String> = modsList = [];
+		contentMetadata.clear();
+
+		contentDirectories.clear();
+		contentDirectories.set('', contentFolderName);
+
+		for (folderName in readDirectory(contentFolderName)) {
+			var folderPath = '$contentFolderName/$folderName';
+
+			if (isDirectory(folderPath) && !list.contains(folderName))
+			{
+				list.push(folderName);
+				contentDirectories.set(folderName, folderPath);
+
+				var rawJson:Null<String> = Paths.getContent('$folderPath/metadata.json');
+				if (rawJson != null && rawJson.length > 0) {
+					var data:Dynamic = Json.parse(rawJson);
+					#if ALLOW_DEPRECATION
+					contentMetadata.set(folderName, updateContentMetadataStructure(data));
+					#else
+					contentMetadata.set(folderName, data);
+					#end
+					continue;
+				}else {
+					contentMetadata.set(folderName, {});
+				}
+			}
+		}
+	}
+	
+	inline static function updateContentMetadataStructure(data:Dynamic):ContentMetadata
+	{
+		inline function getFreeplaySongs():Array<String> {
+			var list:Array<String> = [];
+			
+			var fs:Dynamic = Reflect.field(data, "freeplaySongs");
+			if (fs is Array) {
+				var fs:Array<Dynamic> = cast fs;
+				
+				if (fs.length == 0) {
+					// none
+				}else if (fs[0] is String) {
+					for (s in fs) list.push(Std.string(s));
+				}
+				else if (Reflect.isObject(fs[0])) {
+					for (s in fs) {
+						var v = Reflect.field(s, "name");
+						if (v != null) list.push(Std.string(v));
+					}
+				}
+			}
+			
+			return list;
+		}
+
+		if (Reflect.hasField(data, "freeplaySongs"))
+			Reflect.setField(data, "freeplaySongs", getFreeplaySongs());
+		else
+			Reflect.setField(data, "freeplaySongs", []);
+
+		return data;
+	}
+
+	static public function getModDirectories():Array<String> 
+	{
+		updateContentLists();
+		return modsList;
+	}
+
+	static public function getContentMetadata():Map<String, ContentMetadata>
+	{
+		updateContentLists();
+		return contentMetadata;
+	}
 	#end
+
+	inline static public function getFolders(dir:String, ?modsOnly:Bool = false){
+		#if !MODS_ALLOWED
+		return [Paths.getPreloadPath('$dir/')];
+		
+		#else
+		var foldersToCheck:Array<String> = [
+			Paths.mods(Paths.currentModDirectory + '/$dir/'),
+			Paths.mods('$dir/'),
+		];
+
+		if(!modsOnly)
+			foldersToCheck.push(Paths.getPreloadPath('$dir/'));
+		
+		for(mod in dependencies)foldersToCheck.insert(0, Paths.mods('$mod/$dir/'));
+		for(mod in preLoadContent)foldersToCheck.push(Paths.mods('$mod/$dir/'));
+		for(mod in getGlobalContent())foldersToCheck.insert(0, Paths.mods('$mod/$dir/'));
+		for(mod in postLoadContent)foldersToCheck.insert(0, Paths.mods('$mod/$dir/'));
+
+
+		return foldersToCheck;
+		#end
+	}
+	
+	public static function loadRandomMod()
+	{
+		Paths.currentModDirectory = '';
+	}
 
 	//// String stuff, should maybe move this to a diff class¿¿¿
 	public static var locale(default, set):String;
@@ -760,24 +917,6 @@ class Paths
 
 	public static inline function getString(key:String):Null<String>{
 		return currentStrings.get(key);
-	}
-}
-
-class PackPathsIterator {
-	var key:String;
-	var i:Int = 0;
-
-	public inline function new(key:String) {
-		this.key = key;
-		i = 0;
-	}
-
-	public inline function hasNext():Bool {
-		return i < PackManager.readList.length;
-	}
-
-	public inline function next():{k:Pack, v:String} {
-		return {k: PackManager.readList[i++], v: PackManager.readList[i].getPath(key)};
 	}
 }
 
@@ -873,4 +1012,52 @@ private class AltFilePaths {
 			null;
 	}
 	#end
+}
+
+typedef FreeplayCategoryMetadata = {
+	/**
+		Displayed Name of the category
+		This is used to show the category in the freeplay list
+	**/
+	var name:String;
+
+	/**
+		ID of the category
+		This gets used when adding songs to the category
+		(Defaults are main, side and remix)
+	**/
+	var id:String;
+}
+
+typedef ContentMetadata = {
+	/**
+		Content that will load before this content.
+	**/
+	@:optional var dependencies:Array<String>;
+
+	/**
+		Stages that can appear in the title menu
+	**/
+	@:optional var titleStages:Array<String>;
+
+	/**
+		Songs to be placed into the freeplay menu
+	**/
+	@:optional var freeplaySongs:Array<String>;
+
+	/**
+		Categories to be placed into the freeplay menu
+	**/
+	@:optional var freeplayCategories:Array<FreeplayCategoryMetadata>;
+	
+	/**
+		If this is specified, then songs don't have to be added to freeplaySongs to have them appear
+		As anything in the songs folder will appear in this category instead
+	**/
+	@:optional var defaultCategory:String;
+	/**
+		This mod will always run, regardless of whether it's currently being played or not.
+		(Custom HUDs, etc, will find this useful, as you can have stuff run across every song without adding to the global folder)
+	**/
+	@:optional var runsGlobally:Bool;
 }

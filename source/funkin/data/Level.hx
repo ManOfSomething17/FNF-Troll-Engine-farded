@@ -15,7 +15,7 @@ using CoolerStringTools;
 using StringTools;
 
 class Level {
-	public static function fromFile(fileName:String, ?id:String, packId:String = "", index:Int = 0){
+	public static function fromFile(fileName:String, ?id:String, folder:String = "", index:Int = 0){
 		var json:Null<JSONLevelData> = Paths.exists(fileName + ".json") ? Json.parse(Paths.getContent(fileName + ".json")) : null;
 
 
@@ -41,14 +41,15 @@ class Level {
 		var level = scriptedLevel ?? new Level();
 
 		level.id = id ?? json?.id;
-		level.packId = packId;
+		level.folder = folder;
 		level.songList = json?.songs ?? ["Test"];
-		level.songs = [for (songId in level.songList) new Song(songId, packId)];
+		level.songs = [for (songId in level.songList) new Song(songId, folder)];
 		level.difficulties = json?.difficulties ?? level.difficulties;
 		level.name = json?.name ?? "NAME DOESNT EXIST IDIOT";
 		level.asset = json?.asset ?? "storymenu/titles/week1";
 		level.props = json?.props ?? level.props;
 		level.appearsInStory = json?.appearsInStory ?? true;
+		level.index = json?.index ?? index;
 		level.bgColor = CoolUtil.colorFromString(json?.bgColor ?? "#F9CF51");
 
 		if (scriptedLevel != null) {
@@ -61,11 +62,12 @@ class Level {
 	public function new(){}
 
 	public function toString()
-		return '$packId:$id';
+		return '$folder:$id';
 
 	public var id:String = 'broken';
-	public var packId:String = '';
+	public var folder:String = '';
 	public var bgColor:FlxColor = 0xFFF9CF51;
+	public var index:Int = 0;
 	public var name:String = "PLACEHOLDER";
 	public var asset:String = "storymenu/titles/week1";
 	public var songList:Array<String> = [];
@@ -74,18 +76,20 @@ class Level {
 	public var props:Array<LevelPropData> = [];
 	public var appearsInStory:Bool = true;
 
-	#if ALLOW_DEPRECATION
-	@:deprecated("`folder` is deprecated! Use `packId` instead!")
-	public var folder(get, never):String;
-	@:noCompletion inline function get_folder() return packId;
-	#end
-
 	/**
 	 * Returns a file path to the title asset
 	**/
 	public function getAsset():String
 	{
 		return asset;
+	}
+
+	/**
+	 * Returns an integer to decide placement of the level
+	**/
+	public function getIndex():Int
+	{
+		return index;
 	}
 
 	/**

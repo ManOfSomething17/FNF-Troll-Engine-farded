@@ -1,6 +1,5 @@
 package funkin.states;
 
-#if (CHECK_FOR_UPDATES || display)
 import funkin.api.Native;
 import flixel.group.FlxGroup;
 import funkin.objects.ui.ScrollText;
@@ -743,4 +742,3 @@ class UpdaterState extends MusicBeatState {
 		return Main.outOfDate = false;
 	#end
 }
-#end

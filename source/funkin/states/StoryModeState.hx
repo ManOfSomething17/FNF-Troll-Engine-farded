@@ -212,13 +212,38 @@ class StoryModeState extends MusicBeatState {
 	var levelBGGroups:Array<FlxSpriteGroup> = []; // used for fading when going between levels
 	var levelProps:Array<FlxSpriteGroup> = [];
 
+	// this will be moved to something else i'm currently working on :o
+	public static function scanContentLevels(folder:String):Array<Level>
+	{
+		var levelDir = Paths.getFolderPath(folder) + 'levels/';
+
+		var contentLevelPaths:Array<String> = [];
+		for (file in Paths.readDirectory(levelDir)) {
+			var name = Path.withoutExtension(levelDir + file);
+			if(!contentLevelPaths.contains(name))
+				contentLevelPaths.push(name);
+		}
+
+		var contentLevels:Array<Level> = [];
+		for (filePath in contentLevelPaths) {
+			var id:String = Path.withoutDirectory(filePath);
+			var index:Int = contentLevelPaths.indexOf(filePath);
+			contentLevels.push(Level.fromFile(filePath, id, folder, index));
+		}
+
+		contentLevels.sort((a,b)-> return a.getIndex() - b.getIndex());
+		return contentLevels;
+	}
+
 	public static function getStoryModeLevels():Array<Level>
 	{
 		var levels:Array<Level> = [];
+		var shitToCheck = [''];
+		for (mod in Paths.getModDirectories())
+			shitToCheck.push(mod);
 
-		for (contentId in Paths.packList) {
-			var folder = Paths.packMap.get(contentId);
-			for (level in folder.getStoryModeLevels())
+		for (folder in shitToCheck) {
+			for (level in scanContentLevels(folder))
 				levels.push(level);
 		}
 
@@ -281,7 +306,7 @@ class StoryModeState extends MusicBeatState {
 		add(difficultyRight);
 
 		for (idx => level in levels) {
-			Paths.currentPackId = level.packId;
+			Paths.currentModDirectory = level.folder;
 
 			var title = level.createTitle();
 			title.alpha = idx==selectedLevel ? 1 : 0;
@@ -435,7 +460,7 @@ class StoryModeState extends MusicBeatState {
 
 		selectedLevel = newLevel;
 
-		Paths.currentPackId = levels[selectedLevel].packId;
+		Paths.currentModDirectory = levels[selectedLevel].folder;
 
 		if (!silent)
 			FlxG.sound.play(Paths.sound("scrollMenu"));

@@ -68,7 +68,7 @@ class HScriptedState extends MusicBeatState
 	private static inline function shortenScriptPath(path:String):String {
 		var sp = path.split('/');
 		
-		if (sp[0] == Paths.CONTENT_PATH)
+		if (sp[0] == Paths.contentFolderName)
 			sp.shift();
 
 		var contentFolder = sp.shift();

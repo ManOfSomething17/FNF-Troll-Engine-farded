@@ -89,6 +89,7 @@ class MusicBeatState extends TransitionableState
 
 	override function create()
 	{
+		FlxG.autoPause = ClientPrefs.autoPause;
 		super.create();
 	}
 

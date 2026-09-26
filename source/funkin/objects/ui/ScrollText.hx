@@ -13,10 +13,12 @@ class ScrollText extends FlxText {
 	public var scrollBar:FlxSprite;
 
 	override public function new(x:Float, y:Float, fw:Float) {
-		bg = CoolUtil.blankSprite(1, 1);
+		bg = new FlxSprite().makeGraphic(1, 1);
 		bg.exists = false;
 
-		scrollBar = CoolUtil.blankSprite(12, 1);
+		scrollBar = new FlxSprite().makeGraphic(1, 1);
+		scrollBar.scale.x = 12;
+
 		super(x, y, fw);
 	}
 
@@ -25,9 +27,9 @@ class ScrollText extends FlxText {
 	}
 	
 	override function update(elapsed:Float) {
-		//bg.update(elapsed);
+		bg.update(elapsed);
 		super.update(elapsed);
-		//scrollBar.update(elapsed);
+		scrollBar.update(elapsed);
 		
 		final viewHeight = viewHeight;
 		final canScroll = viewHeight < (this.frameHeight * this.scale.y);

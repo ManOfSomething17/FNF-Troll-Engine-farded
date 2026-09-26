@@ -1,7 +1,8 @@
 package funkin.states.options;
 
 import flixel.text.FlxText;
-import trollui.SlicedSprite;
+import openfl.geom.Rectangle;
+import flixel.addons.ui.FlxUI9SliceSprite;
 
 class KeyboardNavHelper<BindButton> {
 	public var bg:FlxSprite; // for camera
@@ -18,7 +19,7 @@ class KeyboardNavHelper<BindButton> {
 	}
 }
 
-class BindButton<T:Keybind> extends SlicedSprite
+class BindButton<T:Keybind> extends FlxUI9SliceSprite
 {
 	public var textObject:FlxText;
 	public var bind(default, set):T;
@@ -26,8 +27,8 @@ class BindButton<T:Keybind> extends SlicedSprite
 	function _getBindedName(id:T)
 		return Std.string("Sowy"+id);
 
-	public function new(x:Float = 0.0, y:Float = 0.0, ?width:Float, ?height:Float, ?bind:T){
-		super(x, y, width, height, Paths.image("optionsMenu/backdrop"), [22, 22, 22, 22]);
+	public function new(?x:Float, ?y:Float, ?rect:Rectangle, ?bind:T){
+		super(x, y, Paths.image("optionsMenu/backdrop"), rect, [22, 22, 89, 89]);
 
 		bind ??= cast -1; // FUCK YOU
 

@@ -1,6 +1,5 @@
 package funkin.objects.hud;
 
-import math.CoolMath;
 import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.group.FlxGroup;
@@ -73,9 +72,9 @@ class Countdown extends FlxBasic {
 			// you might wanna replace it with something else and stuff @crowplexus
 			var ret:Dynamic = Globals.Function_Continue;
 			if (game != null && game.hudSkinScript != null)
-				ret = game.hudSkinScript.call("makeCountdownSprite", [sprImage, curPos]);
+				ret = game.callScript(game.hudSkinScript, "makeCountdownSprite", [sprImage, curPos]);
 
-			if (ret != Globals.Function_Stop && ret != Globals.Function_Halt)
+			if (ret == Globals.Function_Continue)
 			{
 				// default behaviour, create sprite w/ the specified sprImage
 				sprite = new FlxSprite(0, 0, sprImage);
@@ -90,8 +89,9 @@ class Countdown extends FlxBasic {
 				sprite = cast ret;
 			}
 
-			inline function normalTween() {
-				tween = FlxTween.tween(sprite, {alpha: 0.0}, Conductor.beatLength, {
+			if (sprite != null)
+			{
+				tween = FlxTween.tween(sprite, {alpha: 0}, Conductor.beatLength, {
 					ease: FlxEase.cubeInOut,
 					onComplete: function(twn)
 					{
@@ -100,41 +100,6 @@ class Countdown extends FlxBasic {
 					}
 				});
 			}
-
-			inline function finalTween() {
-				var psx = sprite.scale.x;
-				var psy = sprite.scale.y; // gangnam style
-				sprite.scale.add(0.4 * sprite.scale.x, 0.4 * sprite.scale.y);
-				var ssx = sprite.scale.x;
-				var ssy = sprite.scale.x;
-
-				var sa = sprite.alpha;
-				var sang = sprite.angle;
-
-				inline function twnv(prog:Float, start:Float, end:Float, low:Float, high:Float, ?ease:EaseFunction) {
-					if (ease != null) {
-						prog = ease(CoolMath.scale(prog, start, end, 0.0, 1.0));
-						return CoolMath.scale(prog, 0.0, 1.0, low, high);
-					}else {
-						return CoolMath.scale(prog, start, end, low, high);
-					}
-				}
-
-				tween = FlxTween.num(0, 1.5, Conductor.beatLength * 1.5, {onComplete: _ -> {deleteSprite(); deleteTween();}}, v -> {
-					if (v < 1.0) {
-						sprite.scale.x = twnv(v, 0.0, 1.0, ssx, psx, FlxEase.backIn);
-						sprite.scale.y = twnv(v, 0.0, 1.0, ssy, psy, FlxEase.backIn);
-					}else {
-						sprite.alpha = twnv(v, 1.0, 1.5, sa, 0.0);
-						sprite.scale.x = twnv(v, 1.0, 1.5, psx, 0.0);
-						sprite.scale.y = twnv(v, 1.0, 1.5, psy, 0.0);
-						sprite.angle = twnv(v, 1.0, 3.0, sang, 360.0, FlxEase.smoothStepInOut);
-					}
-				});
-			}
-
-			if (sprite != null)
-				(curPos >= introAlts.length-1) ? finalTween() : normalTween();
 
 			if (game != null) {
 				game.callOnScripts('onCountdownSpritePost', [sprite, curPos]);
@@ -148,9 +113,9 @@ class Countdown extends FlxBasic {
 		{
 			var ret:Dynamic = Globals.Function_Continue;
 			if (game != null && game.hudSkinScript != null)
-				ret = game.hudSkinScript.call("playCountdownSound", [soundName, introSoundsSuffix, curPos]);
+				ret = game.callScript(game.hudSkinScript, "playCountdownSound", [soundName, introSoundsSuffix, curPos]);
 
-			if (ret != Globals.Function_Stop && ret != Globals.Function_Halt)
+			if (ret == Globals.Function_Continue)
 			{
 				// default behaviour
 				var snd:FlxSound = null;

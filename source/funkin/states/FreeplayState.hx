@@ -6,6 +6,8 @@ import flixel.util.FlxColor;
 import funkin.objects.hud.HealthIcon;
 import funkin.objects.ChangingMenuBG;
 
+import sys.FileSystem;
+import funkin.data.Song;
 import funkin.data.BaseSong;
 import funkin.data.Level;
 import funkin.data.Highscore;
@@ -26,7 +28,7 @@ using CoolerStringTools;
 	"changeDifficulty",
 	"positionHighscore"
 ])
-class FreeplayState extends MusicBeatSubstate
+class FreeplayState extends MusicBeatState
 {
 	public static var comingFromPlayState:Bool = false;
 
@@ -58,16 +60,74 @@ class FreeplayState extends MusicBeatSubstate
 	var hintBG:FlxSprite;
 	var hintText:FlxText;
 
-	var songLoaded:String = null;
-	var selectedSong:String = null;
-
 	public static function getFreeplaySongs():Array<BaseSong> {
 		var list:Array<BaseSong> = [];
-		for (contentId in Paths.packList) {
-			var folder = Paths.packMap.get(contentId);
-			for (song in folder.getFreeplaySongs())
-				list.push(song);
+		for (contentId => metadata in Paths.getContentMetadata())
+		{
+			var songIdMap:Map<String, Bool> = [];
+
+			inline function sowy(songId:String) {
+				// weird old tgt shit
+				#if ALLOW_DEPRECATION
+				var splitted:Array<String> = songId.split(":");
+				if (splitted.length > 1)
+					songId = splitted[0];
+				#end
+				
+				if (!songIdMap.exists(songId)) {
+					songIdMap.set(songId, true);
+					list.push(new Song(songId, contentId));
+				}
+			}
+
+			//// level songs
+			for (level in StoryModeState.scanContentLevels(contentId)) {
+				if (!level.isUnlocked())
+					continue;
+				
+				for (song in level.getFreeplaySongs()) {
+					songIdMap.set(song.songId, true);
+					list.push(song);
+				}
+			}
+
+			// metadata file freeplay songs
+			if (metadata.freeplaySongs != null) {
+				for (songId in metadata.freeplaySongs)
+					sowy(songId);
+			}
+
+			// freeplaySonglist.txt
+			var rawList:Null<String> = Paths.getContent(Paths._modPath('data/freeplaySonglist.txt', contentId));
+			if (rawList != null) {
+				for (songId in CoolUtil.listFromString(rawList))
+					sowy(songId);
+			}
+			
+			// default category shit
+			// should prob just make a autoAddToFreeplay bool or sum shit idk lol
+			if (metadata.defaultCategory != null && metadata.defaultCategory.length > 0){
+				var dir = Paths.mods(contentId + "/songs");
+
+				for (file in Paths.readDirectory(dir)) {
+					if (FileSystem.isDirectory(haxe.io.Path.join([dir, file]))) {
+						sowy(file);
+					}
+				}
+
+			}
 		}
+
+		#if USING_MOONCHART
+		var time = Sys.time();
+		funkin.data.Moonchart.MoonchartContent.scanSongs();
+		time = Sys.time() - time;
+		var moonchartSongs = funkin.data.Moonchart.MoonchartContent.freeplaySongs;
+		print('Moonchart song scan took $time seconds, found ${moonchartSongs.length}');
+		for (song in moonchartSongs) {
+			list.push(song);
+		}
+		#end
 
 		return list;
 	} 
@@ -158,23 +218,47 @@ class FreeplayState extends MusicBeatSubstate
 		diffText.font = scoreText.font;
 	}
 
-	override function close() {
-		if (this._parentState != null)
-			super.close();
-		else
-			MusicBeatState.switchState(new funkin.states.MainMenuState());
-	}
-
-	function onAccept() {		
-		if (selectedSongCharts.length == 0) {
-			FlxG.sound.play(Paths.sound('cancelMenu'));
-			showMessage("No charts available");
-			return;
-		}
+	var songLoaded:String = null;
+	var selectedSong:String = null;
+	function onAccept() {
+		var proceed:Bool = false;
 		
-		var proceed = (songLoaded == selectedSong) && (PlayState.SONG != null);
-		if (!proceed)
-			proceed = loadSong();
+		if (selectedSongCharts.length == 0)
+			proceed = false;
+		else{
+			proceed = songLoaded == selectedSong && PlayState.SONG != null;
+		
+			if (!proceed) {
+				try {
+					PlayState.loadPlaylist([selectedSongData], curChartId);
+					proceed = PlayState.SONG != null;
+				}catch(e) {
+					var txt = 'ERROR LOADING SONG';
+					txt += '\n${e.message}';
+
+					// while I COULD use AlphabetPrompt
+					// fuck YOU
+					var ss = new funkin.states.base.Prompt(txt, 0, null, null, "OK", "OK");
+					persistentUpdate = false;
+					openSubState(ss);
+
+					ss.add(new funkin.objects.FlxSignalHolder(FlxG.signals.postUpdate, function() {
+						if (FlxG.mouse.justMoved)
+							FlxG.mouse.visible = true;
+
+						if (controls.ACCEPT)
+							ss.close();
+					}));
+					this.subStateClosed.addOnce(function(ss) {
+						FlxG.mouse.visible = false;
+						persistentUpdate = true;
+					});
+
+					proceed = false;
+					//throw e;
+				}
+			}
+		}
 
 		if (!proceed) {
 			FlxG.sound.play(Paths.sound('cancelMenu'));
@@ -194,59 +278,12 @@ class FreeplayState extends MusicBeatSubstate
 			LoadingState.loadAndSwitchState(new PlayState());
 	}
 
-	function loadSong():Bool {
-		var success:Bool = false;
-
-		try {
-			PlayState.loadPlaylist([selectedSongData], curChartId);
-			success = PlayState.SONG != null;
-		}catch(e) {
-			/*
-			Main.printExceptionStack();
-
-			var txt = 'ERROR LOADING SONG';
-			txt += '\n${e.message}';
-			txt += '\n\n${CrashHandler.callstackToString(haxe.CallStack.exceptionStack())}';
-			showMessage(txt);
-			*/
-			CrashHandler.onCrash(e.message);
-			
-			success = false;
-		}
-
-		if (success)
-			songLoaded = selectedSong;
-
-		return success;
-	}
-
-	function showMessage(txt:String) {
-		var ss = new funkin.states.base.Prompt(txt, 0, null, null, "OK", "OK");
-		persistentUpdate = false;
-		openSubState(ss);
-
-		ss.add(new funkin.objects.FlxSignalHolder(FlxG.signals.postUpdate, function() {
-			if (FlxG.mouse.justMoved)
-				FlxG.mouse.visible = true;
-
-			if (controls.ACCEPT)
-				ss.close();
-		}));
-		ss.closeCallback = function() {
-			FlxG.mouse.visible = false;
-			persistentUpdate = true;
-		}
-	}
-
 	function playSelectedSongMusic() {
 		// load song json and play inst
-		if (songLoaded == selectedSong)
-			return;
-
-		if (!loadSong())
-			return;
-		
-		try {
+		if (songLoaded != selectedSong){
+			songLoaded = selectedSong;
+			PlayState.loadPlaylist([selectedSongData], curChartId);
+			
 			if (PlayState.SONG != null){
 				var instAsset = selectedSongData.getTrackSound(PlayState.SONG.tracks.inst[0]);
 				FlxG.sound.playMusic(instAsset, 0.6);
@@ -255,17 +292,6 @@ class FreeplayState extends MusicBeatSubstate
 				Conductor.changeBPM(PlayState.SONG.bpm);
 				Conductor.tracks.push(FlxG.sound.music);
 			}
-		}
-		catch(e:Dynamic) {
-			/*
-			Main.printExceptionStack();
-
-			var txt = 'ERROR LOADING SONG';
-			txt += '\n${e.message}';
-			txt += '\n\n${CrashHandler.callstackToString(haxe.CallStack.exceptionStack())}';
-			showMessage(txt);
-			*/
-			CrashHandler.onCrash(e.message);
 		}
 	}
 
@@ -307,7 +333,7 @@ class FreeplayState extends MusicBeatSubstate
 		}else if (controls.BACK){
 			menu.controls = null;
 			FlxG.sound.play(Paths.sound('cancelMenu'));
-			close();
+			MusicBeatState.switchState(new funkin.states.MainMenuState());	
 			
 		}else if (FlxG.keys.justPressed.R){
 			openResetScorePrompt();
@@ -347,7 +373,7 @@ class FreeplayState extends MusicBeatSubstate
 
 	function onSelectSong(data:BaseSong)
 	{	
-		Paths.currentPackId = data.packId;
+		Paths.currentModDirectory = data.folder;
 
 		selectedSongData = data;
 		selectedSongCharts = data.getCharts();
@@ -477,7 +503,7 @@ private class FreeplayMenu extends AlphabetMenu
 		var songName:String = metadata.songName;
 		var iconId:Null<String> = metadata.freeplayIcon;
 
-		Paths.currentPackId = song.packId;
+		Paths.currentModDirectory = song.folder;
 		addOption(songName, iconId);
 	}
 

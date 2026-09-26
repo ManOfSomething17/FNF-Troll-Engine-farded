@@ -1,6 +1,5 @@
 package funkin.states;
 
-import funkin.data.content.PackManager;
 import funkin.objects.notes.NoteAnimations;
 import funkin.objects.cutscenes.Cutscene;
 #if VIDEOS_ALLOWED
@@ -35,6 +34,7 @@ import funkin.states.editors.CharacterEditorState;
 import funkin.states.editors.ChartingState;
 import funkin.states.options.OptionsSubstate;
 import funkin.scripts.*;
+import funkin.scripts.Util;
 import flixel.*;
 import flixel.util.*;
 import flixel.util.FlxSignal;
@@ -152,7 +152,7 @@ class PlayState extends MusicBeatState
 	}
 
 	public static function loadSong(song:BaseSong, chartId:String) {
-		Paths.currentPackId = song.packId;
+		Paths.currentModDirectory = song.folder;
 		PlayState.song = song;
 		PlayState.SONG = song.getSwagSong(chartId);
 		PlayState.difficultyName = chartId;
@@ -404,6 +404,9 @@ class PlayState extends MusicBeatState
 
 	public var fish:Fish;
 
+	/** debugPrint text container **/
+	private var debugPrintGroup:FlxTypedGroup<DebugText> = new FlxTypedGroup<DebugText>();
+
 	////
 	public var generatedMusic:Bool = false;
 	public var startedSong:Bool = false;
@@ -602,6 +605,12 @@ class PlayState extends MusicBeatState
 		PauseSubState.resetVariables();
 		GameOverSubstate.resetVariables();
 
+		#if MODS_ALLOWED
+		Paths.preLoadContent = [];
+		Paths.postLoadContent = [];
+		Paths.pushGlobalContent();
+		#end
+
 		OptionsSubstate.resetRestartRecomendations();
 		Paths.getAllStrings();
 		Paths.clearStoredMemory();
@@ -751,7 +760,7 @@ class PlayState extends MusicBeatState
 		setDefaultHScripts("newPlayField", newPlayfield);
 		setDefaultHScripts("initPlayfield", initPlayfield);
 
-		//// GLOBAL PLAYSTATE SCRIPTS
+		//// GLOBAL SONG SCRIPTS
 		var filesPushed:Array<String> = [];
 		for (folder in Paths.getFolders('scripts')) {
 			//// Create scripts in order from the list file first
@@ -788,10 +797,14 @@ class PlayState extends MusicBeatState
 		setStageData(stageData);
 
 		// SONG SPECIFIC SCRIPTS
-		var songPath = song.getSongFile('');
-		for (file in Paths.readDirectory(songPath)) {
-			if (Paths.isHScript(file))
-				createHScript(songPath + file);
+		var filesPushed:Array<String> = [];
+		for (folder in Paths.getFolders('songs/$songId')) {
+			for (file in Paths.readDirectory(folder)) {
+				if (Paths.isHScript(file) && !filesPushed.contains(file)) {
+					createHScript(folder + file);
+					filesPushed.push(file);
+				}
+			}
 		}
 
 		//// Asset precaching start
@@ -1008,6 +1021,9 @@ class PlayState extends MusicBeatState
 		add(notefields);
 		add(timingTxt);
 
+		debugPrintGroup.cameras = [camOther];
+		add(debugPrintGroup);
+
 		#if FUNNY_ALLOWED
 		fish = new Fish(this);
 		fish.cameras = [camOther];
@@ -1119,8 +1135,7 @@ class PlayState extends MusicBeatState
 	}
 
 	inline function onCreatePost() {
-		for (script in funkyScripts)
-			script.call("onCreatePost");
+		callOnAllScripts("onCreatePost");
 		signals.onCreatePost.dispatch();
 	}
 
@@ -1168,12 +1183,15 @@ class PlayState extends MusicBeatState
 		gfGroup.y = GF_Y;
 	}
 
-	#if ALLOW_DEPRECATION
-	@:deprecated("addTextToDebug is deprecated! Use `DebugLog.addMessage` instead")
-	public inline function addTextToDebug(text:String, ?color:FlxColor = FlxColor.WHITE) {
-		DebugLog.addMessage(text, color);
+	public function addTextToDebug(text:String, ?color:FlxColor = FlxColor.WHITE) {
+		debugPrintGroup.forEachAlive(function(spr:DebugText) {
+			spr.y += 20;
+		});
+
+		var txt = debugPrintGroup.recycle(DebugText, () -> new DebugText(debugPrintGroup));
+		txt.text = text;
+		txt.setPosition(10, 10);
 	}
-	#end
 
 	public function reloadHealthBarColors() {
 		// TODO: fuck this move it to hud.changedCharacter
@@ -1875,7 +1893,7 @@ class PlayState extends MusicBeatState
 	}
 
 	function eventNoteEarlyTrigger(event:PsychEvent):Float {
-		var ret:Dynamic = callOnScripts('eventEarlyTrigger', [event.event, event.value1, event.value2]);
+		var ret:Dynamic = callOnAllScripts('eventEarlyTrigger', [event.event, event.value1, event.value2]);
 		if (ret != null && (ret is Int || ret is Float))
 			return ret;
 
@@ -2390,12 +2408,6 @@ class PlayState extends MusicBeatState
 			stats.npsPeak = nps;
 
 		////
-		super.update(elapsed);
-		updateVisualPosition();
-		danceCharacters(); // Update characters dancing
-		checkEventNote();
-		modManager.update(elapsed, curDecBeat, curDecStep);
-
 		if (!endingSong){
 			//// time travel
 			if (startedSong #if !debug && chartingMode #end){
@@ -2433,6 +2445,13 @@ class PlayState extends MusicBeatState
 
 		if (controls.PAUSE && canPause)
 			doPauseShit();
+
+		////
+		super.update(elapsed);
+		updateVisualPosition();
+		danceCharacters(); // Update characters dancing
+		checkEventNote();
+		modManager.update(elapsed, curDecBeat, curDecStep);
 
 		if (generatedMusic && !isDead) {
 			if (ClientPrefs.controllerMode) {
@@ -2489,10 +2508,12 @@ class PlayState extends MusicBeatState
 		return false;
 	}
 
-	function doGameOver():Bool
+	function doGameOver()
 	{
-		if (callOnScripts('onGameOver') == Globals.Function_Stop)
-			return false;
+		switch(callOnScripts('onGameOver')) {
+			case Globals.Function_Stop: return false;
+			case Globals.Function_Halt: return true;
+		}
 
 		isDead = true;
 		deathCounter++;
@@ -3531,15 +3552,12 @@ class PlayState extends MusicBeatState
 		@returns A `FunkinHScript` instance
 	**/
 	public function createHScript(path:String, ?scriptName:String, ?ignoreCreateCall:Bool = false):FunkinHScript
-	{		
-		var foundPack = null;
-		for (pack in PackManager.readList) {
-			if (path.startsWith(pack.path)) {
-				foundPack = pack;
-				break;
-			}
-		}
-		var script = FunkinHScript.fromFile(path, scriptName, ["modName" => foundPack?.id, "scriptPack" => foundPack], ignoreCreateCall != true);
+	{
+		var split = path.split("/");
+		var modName:String = split[0] == Paths.contentFolderName ? split[1] : 'assets';
+		var script = FunkinHScript.fromFile(path, scriptName, [
+			"modName" => modName
+		], ignoreCreateCall != true);
 		funkyScripts.push(script);
 		return script;
 	}
@@ -3608,10 +3626,17 @@ class PlayState extends MusicBeatState
 		callOnScripts("onSectionHit");
 	}
 
+	inline public function callOnAllScripts(event:String, ?args:Array<Dynamic>, ignoreStops:Bool = false, ?exclusions:Array<String>, ?scriptArray:Array<Dynamic>,
+			?vars:Map<String, Dynamic>):Dynamic
+			return callOnScripts(event, args, ignoreStops, exclusions, scriptArray, vars, false);
+
 	inline public function isSpecialScript(script:FunkinScript)
 		return notetypeScripts.exists(script.scriptName) || hudSkinMap.exists(script.scriptName);
 
-	public function stopClosingScripts() {
+	public function callOnScripts(event:String, ?args:Array<Dynamic>, ignoreStops:Bool = false, ?exclusions:Array<String>, ?scriptArray:Array<Dynamic>,
+			?vars:Map<String, Dynamic>, ?ignoreSpecialShit:Bool = true):Dynamic
+	{
+		#if (HSCRIPT_ALLOWED)
 		while (scriptsToClose.length > 0){
 			var script = scriptsToClose.pop();
 
@@ -3619,47 +3644,28 @@ class PlayState extends MusicBeatState
 			funkyScripts.remove(script);
 			script.stop();
 		}
-	}
-
-	public function callOnScripts(funcName:String, ?args:Array<Dynamic>):Dynamic
-	{
-		#if (HSCRIPT_ALLOWED)
-		stopClosingScripts();
-
-		var scripts:Array<FunkinScript> = funkyScripts.filter(s -> !isSpecialScript(s));
-		return Globals.callOnScripts(scripts, funcName, args);
-		#else
-		return Globals.Function_Continue;
-		#end
-	}
-
-	public function callOnScriptsX(event:String, ?args:Array<Dynamic>, ignoreStops:Bool = false, ?exclusions:Array<String>, ?scriptArray:Array<FunkinScript>,
-			?vars:Map<String, Dynamic>, ?ignoreSpecialShit:Bool = true):Dynamic
-	{
-		#if (HSCRIPT_ALLOWED)
-		stopClosingScripts();
 
 		if (args == null) args = [];
 		if (scriptArray == null) scriptArray = funkyScripts;
 		if (exclusions == null) exclusions = [];
 
 		var returnVal:Dynamic = Globals.Function_Continue;
-		for (script in scriptArray)
+		for (idx in 0...scriptArray.length)
 		{
+			var script:FunkinScript = scriptArray[idx];
 			if (script==null || exclusions.contains(script.scriptName) || (ignoreSpecialShit && isSpecialScript(script)))
 				continue;
-			var ret:Dynamic = script.executeFunc(event, args, null, vars);
-			if (ret == Globals.Function_Halt) {
-				//returnVal = ret;
-				returnVal = Globals.Function_Stop;
+			var ret:Dynamic = script.call(event, args, vars);
+			if (ret == Globals.Function_Halt){
+				ret = returnVal;
 				if (!ignoreStops)
-					break;
+					return returnVal;
 			};
 			if (ret != Globals.Function_Continue && ret!=null)
 				returnVal = ret;
 		}
 
-		return returnVal;
+		return (returnVal == null) ? Globals.Function_Continue : returnVal;
 		#else
 		return Globals.Function_Continue;
 		#end
@@ -3676,32 +3682,29 @@ class PlayState extends MusicBeatState
 		}
 	}
 
-	public function callScript(scriptName:String, funcName:String, ?args:Array<Dynamic>):Dynamic
+	public function callScript(script:Dynamic, event:String, ?args:Array<Dynamic>):Dynamic
 	{
 		#if (HSCRIPT_ALLOWED) // no point in calling this code if you.. for whatever reason, disabled scripting.
-		var scripts:Array<FunkinScript> = funkyScripts.filter(scr -> scr.scriptName == scriptName);
-		return Globals.callOnScripts(scripts, funcName, args);
-		#else
-		return Globals.Function_Continue;
+		if((script is FunkinScript)){
+			return callOnScripts(event, args, true, [], [script], [], false);
+		}
+		else if((script is Array)){
+			return callOnScripts(event, args, true, [], script, [], false);
+		}
+		else if((script is String)){
+			var scripts:Array<FunkinScript> = [];
+
+			for (idx in 0...funkyScripts.length)
+			{
+				var scr = funkyScripts[idx];
+				if(scr.scriptName == script)
+					scripts.push(scr);
+			}
+
+			return callOnScripts(event, args, true, [], scripts, [], false);
+		}
 		#end
-	}
-
-	public function cancelTween(tag:String) {
-		if (modchartTweens.exists(tag)) {
-			var twn = modchartTweens.get(tag);
-			twn.cancel();
-			twn.destroy();
-			modchartTweens.remove(tag);
-		}
-	}
-
-	public function cancelTimer(tag:String) {
-		if (modchartTimers.exists(tag)) {
-			var tmr = modchartTimers.get(tag);
-			tmr.cancel();
-			tmr.destroy();
-			modchartTimers.remove(tag);
-		}
+		return Globals.Function_Continue;
 	}
 
 	#if HSCRIPT_ALLOWED

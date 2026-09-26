@@ -3,6 +3,7 @@ package funkin.states;
 import funkin.states.options.OptionsSubstate;
 import funkin.states.base.TransitionableState;
 import flixel.text.FlxText;
+import funkin.data.Song;
 import funkin.data.BaseSong;
 import funkin.data.Highscore;
 import funkin.states.options.OptionsState;
@@ -26,11 +27,24 @@ class SongSelectState extends funkin.states.base.DebugListState
 	{
 		var songList:Array<BaseSong> = [];
 
-		for (contentId in Paths.packList){
-			var folder = Paths.packMap.get(contentId);
-			for (song in folder.getSongs())
-				songList.push(song);
+		inline function pushSong(modDir:Null<String>, folderPath:String, folderName:String) {
+			if (Paths.isDirectory(folderPath + folderName)) {
+				// trace(songList.length, folderName);
+				songList.push(new Song(folderName, modDir));
+			}
 		}
+
+		var folder = 'assets/songs/';
+		for (name in Paths.readDirectory(folder))
+			pushSong(null, folder, name);
+
+		#if MODS_ALLOWED
+		for (modDir in Paths.getModDirectories()){
+			var folder = Paths.mods('$modDir/songs/');
+			for (name in Paths.readDirectory(folder))
+				pushSong(modDir, folder, name);
+		}
+		#end
 
 		return songList;
 	}
@@ -57,7 +71,7 @@ class SongSelectState extends funkin.states.base.DebugListState
 
 		songs ??= getEverySong();
 		this.textStrings = [for (song in songs) song.songId];
-		this.textStrings2 = [for (song in songs) song.packId];
+		this.textStrings2 = [for (song in songs) song.folder];
 
 		super.create();
 
