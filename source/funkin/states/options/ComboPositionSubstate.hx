@@ -81,7 +81,7 @@ class ComboPositionSubstate extends MusicBeatSubstate
 				judgeColor = 0xFFFFFFFF;
 		}
 
-		var comboColor:FlxColor = ClientPrefs.coloredCombos ? judgeColor : 0xFFFFFFFF;
+		var comboColor:FlxColor = ClientPrefs.coloredCombos != "Disabled" ? judgeColor : 0xFFFFFFFF;
 		
 		////////
 		var rat = new RatingGroup();

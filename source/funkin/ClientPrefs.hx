@@ -481,10 +481,10 @@ class ClientPrefs {
 			},
 			"coloredCombos" => {
 				display: "Colored Combos",
-				desc: "When toggled, combo numbers are colored based on the FC.", // Sorry I'm bad at descriptions. < its fine lol
-				type: Toggle,
-				value: false,
-				data: []
+				desc: "If and how combo numbers are colored.", // Sorry I'm bad at descriptions. < its fine lol
+				type: Dropdown,
+				value: "Disabled",
+				data: ["options" => ["Disabled", "Hit Based", "Flag Based"]]
 			},
 			"showMS" => {
 				display: "Show Timing",

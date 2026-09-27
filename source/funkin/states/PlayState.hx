@@ -1924,7 +1924,7 @@ class PlayState extends MusicBeatState
 			stats.setGradeSet(ClientPrefs.gradeSet);
 		}
 
-		if (!ClientPrefs.coloredCombos)
+		if (ClientPrefs.coloredCombos == "Disabled")
 			comboColor = 0xFFFFFFFF;
 
 		if (!ClientPrefs.simpleJudge) {
@@ -3070,7 +3070,10 @@ class PlayState extends MusicBeatState
 			if (judgeData.hideJudge != true)
 				displayJudgment(judgeData.internalName);
 			if (judgeData.comboBehaviour != IGNORE)
+			{
+				if(ClientPrefs.coloredCombos == "Hit Based") comboColor = hud.judgeColours.get(judgeData.internalName);
 				displayCombo(judgeData.comboBehaviour == BREAK ? -stats.cbCombo : stats.combo);
+			}
 		}
 	}
 
@@ -3714,7 +3717,7 @@ class PlayState extends MusicBeatState
 	public function RecalculateRating() {
 		callOnScripts('onRecalculateRating');
 
-		if (ClientPrefs.coloredCombos) {
+		if (ClientPrefs.coloredCombos == "Flag Based") {
 			if (stats.bads > 0 || stats.shits > 0 || stats.comboBreaks > 0)
 				comboColor = 0xFFFFFFFF;
 			else if (stats.goods > 0)
