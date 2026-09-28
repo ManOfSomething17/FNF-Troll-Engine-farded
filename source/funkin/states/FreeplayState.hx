@@ -60,6 +60,7 @@ class FreeplayState extends MusicBeatSubstate
 
 	var songLoaded:String = null;
 	var selectedSong:String = null;
+	var playingSongPreview:Bool = false;
 
 	public static function getFreeplaySongs():Array<BaseSong> {
 		var list:Array<BaseSong> = [];
@@ -250,10 +251,12 @@ class FreeplayState extends MusicBeatSubstate
 			if (PlayState.SONG != null){
 				var instAsset = selectedSongData.getTrackSound(PlayState.SONG.tracks.inst[0]);
 				FlxG.sound.playMusic(instAsset, 0.6);
+				Conductor.pitch = FlxG.sound.music.pitch = ClientPrefs.getGameplaySetting('songspeed', 1.0);
 				Conductor.tracks = [];
 				Conductor.startSong();
 				Conductor.changeBPM(PlayState.SONG.bpm);
 				Conductor.tracks.push(FlxG.sound.music);
+				playingSongPreview = true;
 			}
 		}
 		catch(e:Dynamic) {
@@ -340,6 +343,9 @@ class FreeplayState extends MusicBeatSubstate
 		openSubState(new GameplayChangersSubstate());
 		menu.controls = null;
 		this.subStateClosed.addOnce(function(_) {
+			if (playingSongPreview)
+				Conductor.pitch = FlxG.sound.music.pitch = ClientPrefs.getGameplaySetting('songspeed', 1.0);
+
 			refreshScore();
 			shouldRestoreControl = true;
 		});

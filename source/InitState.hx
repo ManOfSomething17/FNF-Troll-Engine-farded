@@ -64,7 +64,7 @@ class InitState extends TransitionableState
 	public function new()
 	{
 		shitToDo = [
-			Run("Initializing assets", Paths.init),
+			Run("Initializing content", Paths.init),
 			Run("Initializing controls", Controls.init),
 			Run("Initializing preferences", ClientPrefs.initialize),
 			Run("Loading preferences", function() {

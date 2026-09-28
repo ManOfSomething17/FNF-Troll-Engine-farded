@@ -3180,7 +3180,18 @@ class ChartingState extends funkin.states.base.CustomFlxUIState
 		}
 
 		////
-		if (checkCanMouseScroll() && FlxG.mouse.wheel != 0) {
+		if (!checkCanMouseScroll() || FlxG.mouse.wheel == 0) {
+			// do jack
+		}
+		else if (FlxG.keys.pressed.CONTROL) {
+			curZoom += FlxG.mouse.wheel;
+			if (curZoom >= zoomList.length)
+				curZoom = zoomList.length - 1;
+			if (curZoom < 0)
+				curZoom = 0;
+			updateZoom();
+		} 
+		else {
 			var snap = Conductor.stepCrochet;
 			if (options.mouseScrollingQuant) snap *= quantizationMult;
 			Conductor.songPosition = snapTime(Conductor.songPosition, snap) - (snap * FlxG.mouse.wheel);

@@ -415,7 +415,7 @@ class PlayState extends MusicBeatState
 	var goodTicks:Int = 0;
 
 	/** If any song track deviates from the instrumental by more than this amount, then `resyncTracks` will be called **/
-	static final RESYNC_THRESHOLD:Float = 40;
+	static final RESYNC_THRESHOLD:Float = 21;
 
 	/** If the game freezes for more than this time, then the song will rewind back to where it was at the start of the freeze and resume from there. **/
 	static final LAG_SPIKE_ROLLBACK_SECONDS:Float = 0.5;
@@ -2217,7 +2217,7 @@ class PlayState extends MusicBeatState
 		var songPos = inst.time;
 		for (track in Conductor.tracks) {
 			if (track.playing && Math.abs(track.time - songPos) > RESYNC_THRESHOLD) {
-				trace('sus track resync');
+				trace('didi track resync');
 				resyncTracks();
 				break;
 			}
